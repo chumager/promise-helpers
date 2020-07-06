@@ -29,7 +29,9 @@
       {
         "printWidth": 120,
         "tabWidth": 2,
-        "bracketSpacing": false
+        "bracketSpacing": false,
+        "trailingComma": "none",
+        "arrowParens": "avoid"
       }
     ]
   },

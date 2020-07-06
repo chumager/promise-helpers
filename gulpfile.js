@@ -6,10 +6,12 @@ const terser = require("gulp-terser");
 const gif = require("gulp-if");
 const gobf = require("gulp-javascript-obfuscator");
 const debug = require("gulp-debug");
+const babel = require("gulp-babel");
 const path = ["src/**/*.js"];
 function js() {
   return src(path, {base: "src"})
     .pipe(debug())
+    .pipe(babel())
     .pipe(terser())
     .pipe(gif(needObfuscate, gobf({compact: true})))
     .pipe(dest("dist/"));
@@ -17,6 +19,7 @@ function js() {
 function obfuscate(path) {
   return src(path, {base: "src"})
     .pipe(debug({title: "Minimizando"}))
+    .pipe(babel())
     .pipe(terser())
     .pipe(gif(needObfuscate, debug({title: "Ofuscando"})))
     .pipe(gif(needObfuscate, gobf({compact: true})))
