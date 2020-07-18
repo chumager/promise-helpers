@@ -17,7 +17,20 @@ I love chaining, as almost all methods and statics returns promises (besides for
 Imagine a fetch who returns an array of url you must request but one by one, with some time restriction and at least some execution time
 
 ```js
-fetch("someURL").timeout(1000, "first request took too long").get("json").exec().map(url=>fetch(url).get(json).exec().timeout(2000, `URL: ${url} took more than 2000ms`),{atLeast: 1000, parallel: false})
+fetch("someURL")
+  .timeout(1000, "first request took too long")
+  .get("json")
+  .exec()
+  .map(url=>
+    fetch(url)
+      .get(json)
+      .exec()
+      .timeout(2000, `URL: ${url} took more than 2000ms`),
+    {
+      atLeast: 1000, 
+      parallel: false
+    }
+  )
 ```
 The .get("json").exec() repeats? no problemo amigo... let's wrap a new method
 ```js
@@ -29,10 +42,21 @@ wrapper("json", {
 ```
 resulting:
 ```js
-fetch("someURL").timeout(1000, "first request took too long").json().map(url=>fetch(url).json().timeout(2000, `URL: ${url} took more than 2000ms`),{atLeast: 1000, parallel: false})
+fetch("someURL")
+  .timeout(1000, "first request took too long")
+  .json()
+  .map(url=>
+    fetch(url)
+      .json()
+      .timeout(2000, `URL: ${url} took more than 2000ms`),
+    {
+      atLeast: 1000, 
+      parallel: false
+    }
+  )
 ```
 
-That's why I create this module.
+That's why I create this module and obviously I use it in all my develops.
 
 ## If you hate modify primitives.
 For some the primitives are untouchable... I'm not agree with that but I understood. So before you discard this module you can use an extended promise class to avoid it.
@@ -245,6 +269,7 @@ Like map, catchError has the same behavior.
 
 ### sequenceAllSettled
 Like sequence but when you want yo know the status of the promise and the value o reject reason, just like Promise.allSettled, obviously it has no catchError.
+
 
 
 ## Wrapper...

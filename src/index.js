@@ -66,20 +66,17 @@ wrapper("timeout", {
 });
 //timeoutDefault
 wrapper("timeoutDefault", {
-  Static(prom, time = 100, value, force = false) {
-    prom = this.resolve(prom);
+  async Static(prom, time = 100, value, force = false) {
     if (typeof value === "undefined")
       return this.reject(createError("PromiseTimeoutDefaultError", "there is no default for timeoutDefault"));
-    return new this((res, rej) => {
-      setTimeout(() => {
-        res(value);
-      }, time);
-      prom.then(res, err => {
-        if (force) return res(value);
-        rej(err);
-      });
-    });
-  }
+    try {
+      return await this.timeout(prom, time);
+    } catch (err) {
+      if (err instanceof errors.PromiseTimeoutError || force) return value;
+      return this.reject(err);
+    }
+  },
+  depemds: ["timeout"]
 });
 //uncatch
 wrapper("uncatch", {
@@ -106,7 +103,7 @@ wrapper("map", {
         } catch (err) {
           if (catchError) {
             return this.reject(
-              createError("PromiseMapError", "some callback trows an error", {iterable, id, result, err})
+              createError("PromiseMapError", "some callback throws an error", {iterable, id, result, err})
             );
           }
           result.push(err);
@@ -120,6 +117,25 @@ wrapper("map", {
     }
     return parallel ? this.all(result) : result;
   }
+});
+//forEach
+wrapper("forEach", {
+  async Static(iterable, cb, {parallel = false} = {}) {
+    try {
+      await this.map(iterable, cb, {catchError: true, parallel});
+    } catch (error) {
+      if (error instanceof errors.PromiseMapError) {
+        const {iterable, id, result, err} = error;
+        return this.reject(createError("PromiseForEachError", "some callback or iterable throws error"), {
+          iterable,
+          id,
+          result,
+          err
+        });
+      } else return this.reject(error);
+    }
+  },
+  depends: ["map"]
 });
 //sequence
 wrapper("sequence", {
@@ -267,6 +283,35 @@ wrapper("sequenceAllSettled", {
      *}
      *return result;
      */
+  },
+  depends: ["map"]
+});
+//reduce
+//TODO evaluar las condiciones de borde
+wrapper("reduce", {
+  async Static(iterable, cb, initVal, {delay = null, atLeast = null}) {
+    let result = initVal;
+    let id = 0;
+    try {
+      iterable = await iterable;
+      if (!iterable[Symbol.iterator])
+        throw createError("PromiseIterableError", "trying to use sequence withour an iterable object", {
+          iterable,
+          delay,
+          atLeast,
+          initVal
+        });
+      for await (const prom of iterable) {
+        result = await cb(result, prom, id, iterable);
+        id++;
+      }
+    } catch (err) {
+      const error = createError("PromiseIterableError", "some iterable throws error");
+      error.innerError = err;
+      error.args = {result, id};
+      return this.reject(error);
+    }
+    return result;
   }
 });
 //waterfall
@@ -302,34 +347,6 @@ wrapper("waterfall", {
       const error = createError("PromiseIterableError", "some iterable throws error");
       error.innerError = err;
       error.args = {lastResult, id};
-      return this.reject(error);
-    }
-    return result;
-  }
-});
-//reduce
-//TODO evaluar las condiciones de borde
-wrapper("reduce", {
-  async Static(iterable, cb, initVal, {delay = null, atLeast = null}) {
-    let result = initVal;
-    let id = 0;
-    try {
-      iterable = await iterable;
-      if (!iterable[Symbol.iterator])
-        throw createError("PromiseIterableError", "trying to use sequence withour an iterable object", {
-          iterable,
-          delay,
-          atLeast,
-          initVal
-        });
-      for await (const prom of iterable) {
-        result = await cb(result, prom, id, iterable);
-        id++;
-      }
-    } catch (err) {
-      const error = createError("PromiseIterableError", "some iterable throws error");
-      error.innerError = err;
-      error.args = {result, id};
       return this.reject(error);
     }
     return result;
