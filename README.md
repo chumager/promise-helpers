@@ -111,14 +111,78 @@ the "force" argument, defines if you want a default even on rejection,
 Examples:
 ```js
 const response = await axios("someSlowUrl")
-  .then(({body})=>body)
+  .then(({data})=>data)
   .timeoutDefault(1000, "Nothing for now");
 //will print "Nothing for now".
 const badResponse = await axios("some500Url")
-  .then(({body})=>body)
+  .then(({data})=>data)
   .timeoutDefault(1000, "Default response", true);
 //will print "Default response" because the default is forced
+//using get
+const response = await axios("someURL")
+  .get("data")
+  .timeoutDefault(1000, "no response");
+//will print the data if it's fast enough or "no response" if it's slow
 ```
+### uncatch.
+
+Sometimes you just want to pass through the result, and doesn't care for errors because the receiver take care.
+
+Signature:
+```js
+//Static
+Promise.reject(value).uncatch();
+//Method
+somePromise.uncatch();
+```
+Examples:
+```js
+//the receiver function will take care.
+const result = axios("someBadResponseUrl);
+//later...
+const parser = await receiver.uncatch();
+if (parser instanceof Error){
+  //do something with the error
+} else {
+  //do somethinf with the result
+}
+```
+This is an anti pattern approach because you should use try/catch or .then(res, rej) and should document this behavior.
+
+### map.
+Made to simplify the Promise.all/map process. 
+Normal pattern for array
+```js
+const result = await Promise.all(array.map(someFunctionReturningPromises));
+```
+For a promise that returns an array.
+```js
+const result = await array.then(array=>array.map(someFunctionReturningPromises));
+```
+Signature:
+```js
+//Static
+Promise.map(iterable, cb, {catchError: true});
+//method.
+somePromiseIterable.map(cb, {catchError: true});
+```
+If **catchError** is false then will fulfilled with the fulfilled cb and errors. 
+If true (the default) then it will throw an instance of **PromiseMapError** with an arg object containing {iterable, id, result, err};
+Beeing:
+* iterable, the result of the iterable after resolving.
+* id, the id of the iteration who rejects.
+* result, the result at that time including the error.
+* err, the error returned by the callback
+Examples:
+```js
+//a cb that works with no async values
+const cb = v=>v+1;
+//a promise that returns an array or promises.
+const array = Promise.result([...Array.keys(Array(5))].map(v=>Promise.resolve(v)));
+const result = await array.map(cb);//[1,2,3,4,5];
+```
+It helps to work with a promise returning an array of promises and "synchronous/asynchronous callback"
+
 
 ##Wrapper...
 All the helpers definition comes from a wrapper function.
