@@ -12,6 +12,26 @@ When you need to slow down your code or do it sequentially.
 
 When you need to develop with HOF or with high abstraction level.
 
+I love chaining, as almost all methods and statics returns promises (besides forEach) you can always chain.
+
+Imagine a fetch who returns an array of url you must request but one by one, with some time restriction and at least some execution time
+
+```js
+fetch("someURL").timeout(1000, "first request took too long").get("json").exec().map(url=>fetch(url).get(json).exec().timeout(2000, `URL: ${url} took more than 2000ms`),{atLeast: 1000, parallel: false})
+```
+The .get("json").exec() repeats? no problemo amigo... let's wrap a new method
+```js
+wrapper("json", {
+  Method(){
+    return this.get("json").exec();
+  }
+});
+```
+resulting:
+```js
+fetch("someURL").timeout(1000, "first request took too long").json().map(url=>fetch(url).json().timeout(2000, `URL: ${url} took more than 2000ms`),{atLeast: 1000, parallel: false})
+```
+
 That's why I create this module.
 
 ## If you hate modify primitives.
@@ -201,6 +221,32 @@ const array = Promise.result([...Array.keys(Array(5))].map(v=>Promise.resolve(v)
 let result = await array;
 result = await Promise.all(result.map(cb));//[1,2,3,4,5];
 ```
+#### Notes.
+* You can use sync functions to process the async data, and it will always returns a promise of an array with inner items already resolved no matter the cb returns a promise. 
+### forEach.
+Like map and behaves just like **Array.prototype.forEach** but for iterables.
+
+The main difference is it behaves well with async cb, so it will wait until ends to resolves, Array.prototype.forEach doesn't
+
+
+### sequence.
+This is designed for High Abstraction Level, when you don't know what's coming, so you send your slaves to work...
+In simple terms it's like a map with a callback who executes the iterator, as it's name, in sequence... But it also accepts numbers to make a delay in between.
+
+Signature:
+```js
+//Static
+Promise.sequence(IteratorOfFunctions, {catchError: true, delay: null, atLeast: null})
+//Method.
+somePromiseOfFunctionIterator.sequence({catchError: true, delay: null, atLeast: null});
+```
+delay and atLeast are applied on every function resolution.
+Like map, catchError has the same behavior.
+
+### sequenceAllSettled
+Like sequence but when you want yo know the status of the promise and the value o reject reason, just like Promise.allSettled, obviously it has no catchError.
+
+
 ## Wrapper...
 All the helpers definition comes from a wrapper function.
 The signature is

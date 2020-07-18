@@ -7,7 +7,8 @@ const {
     PromiseTimeoutDefaultError,
     PromiseKeyNotFound,
     PromiseMaxIterationsError,
-    PromiseMapError
+    PromiseMapError,
+    PromiseSequenceError
   },
   wrapper
 } = require("../");
@@ -229,6 +230,24 @@ describe("Test", function () {
     it("array of numbers and multipliy by 2", function () {
       return localPromise.map(this.test.normalArray, v => v * 2).should.eventually.be.eql(this.test.resultNormalArray);
     });
+    it("array of numbers and multipliy by id with inverted delay returns well in around 230ms", function () {
+      return localPromise
+        .map(this.test.normalArray, async (v, id) => {
+          return await localPromise.resolve(v * id).delay((1 / v) * 100);
+        })
+        .should.eventually.be.eql(this.test.resultMultiplyById);
+    });
+    it("array of numbers and multipliy by id with inverted delay in parallel returns well in around 100ms", function () {
+      return localPromise
+        .map(
+          this.test.normalArray,
+          async (v, id) => {
+            return await localPromise.resolve(v * id).delay((1 / v) * 100);
+          },
+          {parallel: true}
+        )
+        .should.eventually.be.eql(this.test.resultMultiplyById);
+    });
     it("promise array of numbers and multipliy by 2", function () {
       return localPromise
         .resolve(this.test.normalArray)
@@ -257,7 +276,8 @@ describe("Test", function () {
       return localPromise
         .resolve(this.test.promiseArrayInnerReject)
         .map((v, id) => v * id)
-        .should.eventually.be.rejectedWith(3);
+        .should.eventually.be.rejectedWith(PromiseMapError)
+        .with.nested.property("args.err", "ERROR");
     });
     it("maps array of promises and multipliy by id, the third rejected with cachtError false", function () {
       return localPromise
@@ -273,7 +293,8 @@ describe("Test", function () {
           if (res > 5) throw "ERROR";
           return res;
         })
-        .should.eventually.be.rejectedWith("ERROR");
+        .should.eventually.be.rejectedWith(PromiseMapError)
+        .with.nested.property("args.err", "ERROR");
     });
     it("maps array of promises and multipliy by id, if result > 10 \
 the callbacks throws with catchError false", function () {
@@ -287,7 +308,7 @@ the callbacks throws with catchError false", function () {
           },
           {catchError: false}
         )
-        .should.eventually.be.rejectedWith(PromiseMapError, "ERROR");
+        .should.eventually.be.eql([0, 2, 6, "ERROR", "ERROR"]);
     });
     it("maps array of promises and multipliy by id, if result > 10 \
 the callbacks throws with catchError false and parallel false", function () {
@@ -320,11 +341,11 @@ the callbacks throws with catchError false and parallel false", function () {
         .sequence([() => 1, () => 2, () => 3, () => 4, () => 5], {atLeast: 20})
         .should.eventually.eql([1, 2, 3, 4, 5]);
     });
-    it("Promise sequence resolves around 100ms with 5 delays of 20ms and atLeast of 10ms", function () {
+    it("Promise sequence resolves around 100ms with 5 delays of 10ms and atLeast of 20ms", function () {
       return localPromise
         .sequence([() => 1, () => 2, () => 3, () => 4, () => 5], {
-          delay: 20,
-          atLeast: 10
+          delay: 10,
+          atLeast: 20
         })
         .should.eventually.eql([1, 2, 3, 4, 5]);
     });
@@ -334,7 +355,7 @@ the callbacks throws with catchError false and parallel false", function () {
           delay: 20,
           atLeast: 10
         })
-        .should.be.rejectedWith("ERROR");
+        .should.be.rejectedWith(PromiseSequenceError);
     });
     it("Promise sequence with no iterable rejects correctly", function () {
       return localPromise.sequence({test: "Hello World"}, {delay: 20}).should.be.rejectedWith(PromiseIterableError);

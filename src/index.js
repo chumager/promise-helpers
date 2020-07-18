@@ -1,3 +1,4 @@
+const PromiseDelay = Symbol("PromiseDelay");
 let functions = {};
 function wrapper(name, {Static, Method, depends = []}) {
   const fn = (localPromise = Promise, force = false) => {
@@ -88,7 +89,7 @@ wrapper("uncatch", {
 });
 //Map
 wrapper("map", {
-  async Static(iterable, cb, {catchError = true, parallel = true} = {}) {
+  async Static(iterable, cb, {catchError = true, parallel = false} = {}) {
     const result = [];
     let id = 0;
     try {
@@ -115,88 +116,157 @@ wrapper("map", {
       }
     } catch (err) {
       if (err instanceof errors.PromiseIterableError) throw err;
-      return this.reject(createError("PromiseMapError", "some callback or iterable rejects", {iterable, id, result, err}));
+      return this.reject(createError("PromiseMapError", "some callback or iterable ", {iterable, id, result, err}));
     }
     return parallel ? this.all(result) : result;
   }
 });
 //sequence
 wrapper("sequence", {
-  async Static(iterable, {delay = null, atLeast = null}) {
-    const result = [];
+  async Static(iterable, {catchError = true, delay = null, atLeast = null}) {
+    const cb = v => {
+      if (typeof v === "number") return this.delay(v, PromiseDelay);
+      let res = this.resolve(v());
+      if (delay) res = res.delay(delay);
+      if (atLeast) res = res.atLeast(atLeast);
+      return res;
+    };
     try {
-      iterable = await iterable;
-      if (!iterable[Symbol.iterator])
-        throw createError("PromiseIterableError", "trying to use sequence without an iterable object", {
+      const result = await this.map(iterable, cb, {catchError});
+      return result.reduce((arr, res) => {
+        if (res !== PromiseDelay) arr.push(res);
+        return arr;
+      }, []);
+    } catch (error) {
+      if (error instanceof errors.PromiseMapError) {
+        const {iterable, id, result, err} = error;
+        return this.reject(createError("PromiseSequenceError", "some callback or iterable throws error"), {
           iterable,
-          delay,
-          atLeast
+          id,
+          result,
+          err
         });
-      for await (let prom of iterable) {
-        if (!["function", "number"].includes(typeof prom))
-          throw createError("PromiseIterableError", "iterable is neither function nor number");
-        switch (typeof prom) {
-          case "function":
-            prom = prom();
-            break;
-          case "number":
-            await new this(res => setTimeout(res, prom));
-            continue;
-        }
-        if (delay) prom = this.resolve(prom).delay(delay);
-        if (atLeast) prom = this.resolve(prom).atLeast(atLeast);
-
-        result.push(await prom);
-      }
-    } catch (err) {
-      if (err instanceof Error) {
-        err.args = {result};
-      }
-      return this.reject(err);
+      } else return this.reject(error);
     }
-    return result;
-  }
+    /*
+     *    const result = [];
+     *    let id = 0;
+     *    try {
+     *      iterable = await iterable;
+     *      if (!iterable[Symbol.iterator])
+     *        throw createError("PromiseIterableError", "trying to use sequence without an iterable object", {
+     *          iterable,
+     *          delay,
+     *          atLeast
+     *        });
+     *      for await (let prom of iterable) {
+     *        if (!["function", "number"].includes(typeof prom))
+     *          throw createError("PromiseIterableError", "iterable is neither function nor number");
+     *        try {
+     *          switch (typeof prom) {
+     *            case "function":
+     *              prom = prom();
+     *              break;
+     *            case "number":
+     *              await new this(res => setTimeout(res, prom));
+     *              continue;
+     *          }
+     *          if (delay) prom = this.resolve(prom).delay(delay);
+     *          if (atLeast) prom = this.resolve(prom).atLeast(atLeast);
+     *
+     *          result.push(await prom);
+     *        } catch (err) {
+     *          if (catchError) {
+     *            return this.reject(
+     *              createError("PromiseMapError", "some callback trows an error", {iterable, id, result, err})
+     *            );
+     *          }
+     *          result.push(err);
+     *        } finally {
+     *          id++;
+     *        }
+     *      }
+     *    } catch (err) {
+     *      if (err instanceof Error) {
+     *        err.args = {result};
+     *      }
+     *      return this.reject(err);
+     *    }
+     *    return result;
+     */
+  },
+  depends: ["map"]
 });
 //map
 //sequenceAllSettled
 wrapper("sequenceAllSettled", {
   async Static(iterable, {delay = null, atLeast = null}) {
-    const result = [];
+    const cb = async v => {
+      if (typeof v === "number") return this.delay(v, PromiseDelay);
+      try {
+        let res = this.resolve(v());
+        if (delay) res = res.delay(delay);
+        if (atLeast) res = res.atLeast(atLeast);
+        return {status: "fulfilled", value: await res};
+      } catch (reason) {
+        return {status: "rejected", reason};
+      }
+    };
     try {
-      iterable = await iterable;
-      if (!iterable[Symbol.iterator])
-        throw createError("PromiseIterableError", "trying to use sequence withour an iterable object", {
+      const result = await this.map(iterable, cb);
+      return result.reduce((arr, res) => {
+        if (res !== PromiseDelay) arr.push(res);
+        return arr;
+      }, []);
+    } catch (error) {
+      if (error instanceof errors.PromiseMapError) {
+        const {iterable, id, result, err} = error;
+        return this.reject(createError("PromiseSequenceError", "some callback or iterable throws error"), {
           iterable,
-          delay,
-          atLeast
+          id,
+          result,
+          err
         });
-      for (let prom of iterable) {
-        if (!["function", "number"].includes(typeof prom))
-          throw createError("PromiseIterableError", "iterable is neither function nor number");
-        switch (typeof prom) {
-          case "function":
-            prom = prom();
-            break;
-          case "number":
-            await new this(res => setTimeout(res, prom));
-            continue;
-        }
-        if (delay) prom = this.resolve(prom).delay(delay);
-        if (atLeast) prom = this.resolve(prom).atLeast(atLeast);
-        try {
-          const value = await prom;
-          result.push({status: "fulfilled", value});
-        } catch (reason) {
-          result.push({status: "rejected", reason});
-        }
-      }
-    } catch (err) {
-      if (err instanceof Error) {
-        err.args = {result};
-      }
-      return this.reject(err);
+      } else return this.reject(error);
     }
-    return result;
+    /*
+     *const result = [];
+     *try {
+     *  iterable = await iterable;
+     *  if (!iterable[Symbol.iterator])
+     *    throw createError("PromiseIterableError", "trying to use sequence withour an iterable object", {
+     *      iterable,
+     *      delay,
+     *      atLeast
+     *    });
+     *  for (let prom of iterable) {
+     *    if (!["function", "number"].includes(typeof prom))
+     *      throw createError("PromiseIterableError", "iterable is neither function nor number");
+     *    switch (typeof prom) {
+     *      case "function":
+     *        prom = prom();
+     *        break;
+     *      case "number":
+     *        await new this(res => setTimeout(res, prom));
+     *        continue;
+     *    }
+     *    if (delay) prom = this.resolve(prom).delay(delay);
+     *    if (atLeast) prom = this.resolve(prom).atLeast(atLeast);
+     *    try {
+     *      const value = await prom;
+     *      result.push({status: "fulfilled", value});
+     *    } catch (reason) {
+     *      result.push({status: "rejected", reason});
+     *    }
+     *  }
+     *} catch (err) {
+     *  if (err instanceof Error) {
+     *    err.args = {result};
+     *  }
+     *  return this.reject(err);
+     *}
+     *return result;
+     */
   }
 });
 //waterfall
@@ -375,5 +445,6 @@ function all(localPromise = Promise) {
 }
 //add all helpers to function
 Object.assign(all, functions, errors, {wrapper});
+
 export default all;
 export {functions, errors, wrapper};
