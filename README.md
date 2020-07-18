@@ -80,23 +80,26 @@ Promise.delay(1000, "Hello World").atLeast(500).then(console.log);
 Will print _Hello World_ in around 1000 ms.
 ### timeout.
 Waits until the timeout to rejects, if the promise is resolved before then it chains the result.
+
 Signature:
 ```js
 Promise.timeout(somePromise, time=100[,error]);
 somePromise.timeout(time[, error]);
 ```
 error is the value for the rejection, if not set then a instance of **PromiseTimeoutError** with the message **Promise timeout in ${time}ms** will be the rejected value.
-examples:
+
+Examples:
 ```js
-Promise.delay(1000, "nothing").timeout(500).catch(console.log);
+Promise.delay(1000, "nothing").timeout(500).catch(console.error);
 ```
 Will reject the promise because it took more than 500ms in resolve.
 ```js
-Promise.delay(500, "Hello World").timeout(500, "ERROR").then(console.log);
+Promise.delay(500, "Hello World").timeout(1000, "ERROR").then(console.log);
 ```
 will print _Hello World_ because it resolves in 500ms and the timeout was 1000ms.
 ### timeoutDefault.
 Like **timeout** but supports a "default" value, so un case of timeout you can avoid the rejection and replace it with a default value.
+
 Signature:
 ```js
 Promise.timeoutDefault(something, time=100, default, force=false);
@@ -104,13 +107,11 @@ Promise.timeoutDefault(something, time=100, default, force=false);
 somePromise.timeoutDefault(time=100, default, force=false);
 ```
 the "force" argument, defines if you want a default even on rejection,
-examples:
+
+Examples:
 ```js
-let response = "Nothing for now";
-axios("someSlowUrl").then(({body})=>{
-  response = body;
-  return response;
-}).timeoutDefault(1000, response);
+const response = await axios("someSlowUrl").then(({body})=>body).timeoutDefault(1000, "Nothing for now");
+const badResponse = await axios("some500Url").then(({body})=>body).timeoutDefault(1000, "Default response", true);
 ```
 
 ##Wrapper...
