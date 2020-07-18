@@ -1,6 +1,9 @@
 let functions = {};
-function wrapper(name, {Static, Method}) {
+function wrapper(name, {Static, Method, depends = []}) {
   const fn = (localPromise = Promise, force = false) => {
+    depends.forEach(depend => {
+      functions[depend](localPromise);
+    });
     if (Method) {
       if (!localPromise.prototype[name] || force) {
         localPromise.prototype[name] = Method;
@@ -19,109 +22,71 @@ function wrapper(name, {Static, Method}) {
     }
   };
   functions[name] = fn;
+  return fn;
 }
 //delay
 wrapper("delay", {
   Static(time = 100, value) {
-    return new this(res => setTimeout(res, time, value));
+    return new this((res, rej) => {
+      setTimeout(res, time, value);
+      this.resolve(value).catch(rej);
+    });
   },
   Method(time = 100) {
     const promise = this.constructor;
-    return this.then(val => new promise(res => setTimeout(res, time, val)));
+    return this.then(val => promise.delay(time, val));
   }
 });
 //atLeast
 wrapper("atLeast", {
-  Method(time = 100) {
+  Static(prom, time = 100) {
     const start = Date.now();
-    const promise = this.constructor;
-    return this.then(val => {
+    return this.resolve(prom).then(val => {
       const diff = Date.now() - start;
-      if (time > diff) return new promise(res => setTimeout(res, time - diff, val));
+      if (time > diff) return new this(res => setTimeout(res, time - diff, val));
       return val;
     });
   }
 });
 //timeout
 wrapper("timeout", {
-  Method(time, error) {
-    const promise = this.constructor;
-    if (typeof time === "string") {
-      error = time;
-      time = 100;
+  Static(prom, time, error) {
+    if (typeof time !== "number") {
+      throw createError("PromiseTimeoutError", "time is not a number");
     }
-    let response, reject;
-    const P = new promise((res, rej) => {
-      response = res;
-      reject = rej;
+    return new this((res, rej) => {
+      setTimeout(() => {
+        rej(createError("PromiseTimeoutError", error || `Promise timeout in ${time}ms`, {time}));
+      }, time);
+      const Prom = typeof prom === "function" ? prom : () => prom;
+      this.resolve(Prom()).then(res, rej);
     });
-    setTimeout(() => {
-      let localError = createError("PromiseTimeoutError", error || `Promise timeout in ${time}ms`, time);
-      reject(localError);
-    }, time);
-    this.then(response, reject);
-    return P;
   }
 });
 //timeoutDefault
 wrapper("timeoutDefault", {
-  Method(time = 100, options = {default: null, chainable: true}) {
-    const promise = this.constructor;
-    if (options.default === null)
-      return promise.reject(createError("PromiseTimeoutDefaultError", "there is no default for timeoutDefault"));
-    let response, reject;
-    const P = new promise((res, rej) => {
-      response = res;
-      reject = rej;
+  Static(prom, time = 100, value, force = false) {
+    prom = this.resolve(prom);
+    if (typeof value === "undefined")
+      return this.reject(createError("PromiseTimeoutDefaultError", "there is no default for timeoutDefault"));
+    return new this((res, rej) => {
+      setTimeout(() => {
+        res(value);
+      }, time);
+      prom.then(res, err => {
+        if (force) return res(value);
+        rej(err);
+      });
     });
-    setTimeout(() => {
-      response(options.default);
-    }, time);
-    this.then(response, err => {
-      if (options.chainable) return reject(err);
-      response(options.default);
-    });
-    return P;
   }
 });
-//sequence
-wrapper("sequence", {
-  async Static(iterable, {delay = null, atLeast = null}) {
-    const result = [];
-    try {
-      iterable = await iterable;
-      if (!iterable[Symbol.iterator])
-        throw createError("PromiseIterableError", "trying to use sequence without an iterable object", {
-          iterable,
-          delay,
-          atLeast
-        });
-      for (let prom of iterable) {
-        if (!["function", "number"].includes(typeof prom))
-          throw createError("PromiseIterableError", "iterable is neither function nor number");
-        switch (typeof prom) {
-          case "function":
-            prom = prom();
-            break;
-          case "number":
-            await new this(res => setTimeout(res, prom));
-            continue;
-        }
-        if (delay) prom = this.resolve(prom).delay(delay);
-        if (atLeast) prom = this.resolve(prom).atLeast(atLeast);
-
-        result.push(await prom);
-      }
-    } catch (err) {
-      if (err instanceof Error) {
-        err.args = {result};
-      }
-      return this.reject(err);
-    }
-    return result;
+//uncatch
+wrapper("uncatch", {
+  async Static(prom, transform = v => v) {
+    return this.resolve(prom).catch(transform);
   }
 });
-//map
+//Map
 wrapper("map", {
   async Static(iterable, cb, {catchError = true} = {}) {
     const result = [];
@@ -158,6 +123,44 @@ wrapper("map", {
     return result;
   }
 });
+//sequence
+wrapper("sequence", {
+  async Static(iterable, {delay = null, atLeast = null}) {
+    const result = [];
+    try {
+      iterable = await iterable;
+      if (!iterable[Symbol.iterator])
+        throw createError("PromiseIterableError", "trying to use sequence without an iterable object", {
+          iterable,
+          delay,
+          atLeast
+        });
+      for await (let prom of iterable) {
+        if (!["function", "number"].includes(typeof prom))
+          throw createError("PromiseIterableError", "iterable is neither function nor number");
+        switch (typeof prom) {
+          case "function":
+            prom = prom();
+            break;
+          case "number":
+            await new this(res => setTimeout(res, prom));
+            continue;
+        }
+        if (delay) prom = this.resolve(prom).delay(delay);
+        if (atLeast) prom = this.resolve(prom).atLeast(atLeast);
+
+        result.push(await prom);
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        err.args = {result};
+      }
+      return this.reject(err);
+    }
+    return result;
+  }
+});
+//map
 //sequenceAllSettled
 wrapper("sequenceAllSettled", {
   async Static(iterable, {delay = null, atLeast = null}) {
@@ -214,7 +217,7 @@ wrapper("waterfall", {
           atLeast,
           initVal
         });
-      for (let fn of iterable) {
+      for await (let fn of iterable) {
         lastResult = result;
         if (!["function", "number"].includes(typeof fn))
           throw createError("PromiseIterableError", "iterable is neither function nor number");
@@ -374,6 +377,6 @@ function all(localPromise = Promise) {
   }
 }
 //add all helpers to function
-Object.assign(all, functions, errors);
+Object.assign(all, functions, errors, {wrapper});
 export default all;
-export {functions, errors};
+export {functions, errors, wrapper};

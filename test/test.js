@@ -7,7 +7,8 @@ const {
     PromiseTimeoutDefaultError,
     PromiseKeyNotFound,
     PromiseMaxIterationsError
-  }
+  },
+  wrapper
 } = require("../");
 const localPromise = class extends Promise {};
 PromiseHelpers(localPromise);
@@ -24,7 +25,7 @@ describe("Test", function () {
     this.currentTest.resultMultiplyById = this.currentTest.normalArray.map((v, id) => v * id);
     this.currentTest.promiseArray = this.currentTest.normalArray.map(v => localPromise.resolve(v));
     this.currentTest.promiseArrayInnerReject = [...this.currentTest.promiseArray];
-    this.currentTest.promiseArrayInnerReject[2] = localPromise.reject(3);
+    this.currentTest.promiseArrayInnerReject[2] = localPromise.reject("ERROR");
     Promise.all(this.currentTest.promiseArrayInnerReject).catch(() => true);
   });
   describe("LocalPromise", function () {
@@ -51,63 +52,118 @@ describe("Test", function () {
     });
   });
   describe("Delay", function () {
-    it("static delay took around 100ms", function () {
+    it("static 100ms", function () {
       return localPromise.delay(100).should.be.fulfilled;
     });
-    it("static delay behaves well with rejections", function () {
+    it("100ms", function () {
+      return localPromise.resolve(1).delay(100).should.be.fulfilled;
+    });
+    it("static with rejected value", function () {
+      return localPromise
+        .delay(100, localPromise.reject("ERROR"))
+        .delay(100)
+        .should.eventually.be.rejectedWith("ERROR");
+    });
+    it("static behaves well with thrown value", function () {
+      let prom = new Promise(() => {
+        throw "ERROR";
+      });
+      return localPromise.delay(100, prom).delay(100).should.eventually.be.rejectedWith("ERROR");
+    });
+    it("after rejection", function () {
       return localPromise.reject("ERROR").delay(100).delay(100).should.eventually.be.rejectedWith("ERROR");
     });
-    it("delay behaves well with rejections in several delay chained", function () {
+    it("reject after delay, with delay chains after", function () {
+      return localPromise
+        .delay(100)
+        .then(() => localPromise.reject("ERROR"))
+        .delay(100)
+        .delay(100)
+        .should.eventually.be.rejectedWith("ERROR");
+    });
+    it("reject chained with several delays of 100ms", function () {
       return localPromise.reject("ERROR").delay(100).delay(100).delay(100).delay(100).delay(100).should.eventually.be
         .rejected;
     });
-    it("localPromise.resolve.delay took around 100ms", function () {
-      const res = localPromise.resolve("test").delay(100);
-      return res.should.eventually.be.equal("test");
+    it("delay chain 5x20ms", function () {
+      return localPromise
+        .resolve("test")
+        .delay(20)
+        .delay(20)
+        .delay(20)
+        .delay(20)
+        .delay(20)
+        .should.eventually.be.equal("test");
     });
-    it("Promise delay chain took around 100ms", function () {
-      const res = localPromise.resolve("test").delay(20).delay(20).delay(20).delay(20).delay(20);
-      return res.should.eventually.be.equal("test");
-    });
-    it("Promise delay chain in for loop took around 100ms", function () {
+    it("chain in for loop 5x20ms", function () {
       let res = localPromise.resolve("test");
       for (let i = 0; i < 5; i++) {
         res = res.delay(20);
       }
       return res.should.eventually.be.equal("test");
     });
-    it("Promise all delay took around 100ms", function () {
+    it("Promise.all wth 5x20ms delay each", function () {
       const arr = [...Array(5).keys()];
       const res = localPromise.all(arr.map(v => localPromise.resolve(v).delay(20)));
       return res.should.eventually.be.eql(arr);
     });
   });
   describe("AtLeast", function () {
-    it("Promise resolves at least in 100ms", function () {
-      return localPromise.delay(50).atLeast(100).should.be.fulfilled;
+    it("100ms", function () {
+      return localPromise.resolve(1).atLeast(100).should.be.fulfilled;
     });
-    it("Promise resolves arround 100ms with atLeast 50ms", function () {
-      return localPromise.delay(100).atLeast(50).should.be.fulfilled;
+    it("after rejection", function () {
+      return localPromise.reject("ERROR").atLeast(100).atLeast(100).should.eventually.be.rejectedWith("ERROR");
     });
-    it("Promise of 50ms chained with 5 atLeast of 100ms", function () {
-      return localPromise.delay(50).atLeast(100).atLeast(100).atLeast(100).atLeast(100).atLeast(100).should.be
-        .fulfilled;
+    it("reject chained with several atLeasts of 100ms", function () {
+      return localPromise.reject("ERROR").atLeast(100).atLeast(100).atLeast(100).atLeast(100).atLeast(100).should
+        .eventually.be.rejected;
+    });
+    it("atLeast chain 5x20ms", function () {
+      return localPromise
+        .resolve("test")
+        .atLeast(20)
+        .atLeast(20)
+        .atLeast(20)
+        .atLeast(20)
+        .atLeast(20)
+        .should.eventually.be.equal("test");
+    });
+    it("chain in for loop 5x20ms", function () {
+      let res = localPromise.resolve("test");
+      for (let i = 0; i < 5; i++) {
+        res = res.atLeast(20);
+      }
+      return res.should.eventually.be.equal("test");
+    });
+    it("Promise.all wth 5x20ms atLeast each", function () {
+      const arr = [...Array(5).keys()];
+      const res = localPromise.all(arr.map(v => localPromise.resolve(v).atLeast(20)));
+      return res.should.eventually.be.eql(arr);
     });
   });
   describe("Timeout", function () {
-    it("Promise resolves before 100ms", function () {
+    it("resolves before 100ms", function () {
       return localPromise.delay(50).timeout(100).should.be.fulfilled;
     });
-    it("Promise behaves well with rejection", function () {
+    it("behaves well with rejection", function () {
       return localPromise.reject(50).timeout(100).should.be.rejectedWith(50);
     });
-    it("Promise rejects after 100ms", function () {
+    it("rejects after 100ms a syncronous long task", function () {
+      const fn = () => {
+        let val = 0;
+        for (let i = 0; i < 9999999999; i++) val += i;
+        return val;
+      };
+      return localPromise.timeout(fn(), 100).should.be.rejectedWith(PromiseTimeoutError);
+    });
+    it("rejects after 100ms", function () {
       return localPromise.delay(600).timeout(100).should.be.rejected;
     });
-    it("Promise timeout error is PromiseTimeoutError", function () {
+    it("timeout error is PromiseTimeoutError", function () {
       return localPromise.delay(200).timeout(100).should.be.rejectedWith(PromiseTimeoutError);
     });
-    it("timeout behaves well in chained incremental timeouts", function () {
+    it("behaves well in chained incremental timeouts", function () {
       return localPromise
         .delay(200)
         .timeout(100)
@@ -115,7 +171,8 @@ describe("Test", function () {
         .timeout(300)
         .timeout(400)
         .timeout(500)
-        .should.be.rejectedWith(PromiseTimeoutError);
+        .should.be.eventually.rejectedWith(PromiseTimeoutError)
+        .with.nested.property("args.time", 100);
     });
     it("timeout behaves well in chained decremental timeouts", function () {
       return localPromise
@@ -125,44 +182,75 @@ describe("Test", function () {
         .timeout(300)
         .timeout(200)
         .timeout(100)
-        .should.be.rejectedWith(PromiseTimeoutError);
+        .should.be.eventually.rejectedWith(PromiseTimeoutError)
+        .with.nested.property("args.time", 100);
     });
   });
   describe("TimeoutDefault", function () {
-    it("Promise rejects correctly with no default", function () {
+    it("rejects correctly when no default", function () {
       return localPromise.resolve().timeoutDefault(100).should.be.rejectedWith(PromiseTimeoutDefaultError);
     });
-    it("Promise timeout in 100ms and returns true as default", function () {
-      return localPromise.delay(200).timeoutDefault(100, {default: true}).should.eventually.be.eq(true);
+    it("timeout in 100ms and returns true as default", function () {
+      return localPromise.delay(200).timeoutDefault(100, true).should.eventually.be.eq(true);
     });
-    it("Promise rejects and chain with timeoutDefault", function () {
+    it("rejects and forces to return default", function () {
+      return localPromise.reject(false).timeoutDefault(100, true, true).should.eventually.be.eq(true);
+    });
+  });
+  describe("Wrapper", function () {
+    it("wraps a add function that adds a value to result", function () {
+      wrapper("add", {
+        Static(prom, toAdd) {
+          return this.resolve(prom).then(val => val + toAdd);
+        }
+      })(localPromise);
+      return typeof localPromise.add == "function" && typeof localPromise.resolve(5).add === "function";
+    });
+    it("static add", function () {
+      return localPromise.add(5, 5).should.eventually.be.eq(10);
+    });
+    it("method add", function () {
+      return localPromise.resolve(5).add(5).should.eventually.be.eq(10);
+    });
+  });
+  describe("Uncatch", function () {
+    it("reject and return error as value", function () {
+      return localPromise.reject("ERROR").uncatch().should.eventually.be.eq("ERROR");
+    });
+    it("reject and return error message", function () {
       return localPromise
-        .reject(false)
-        .timeoutDefault(100, {default: true, chainable: false})
-        .should.eventually.be.eq(true);
+        .reject(new Error("ERROR"))
+        .uncatch(e => e.message)
+        .should.eventually.be.eq("ERROR");
     });
   });
   describe("Map", function () {
-    it("maps array and multipliy by 2", function () {
+    it("array of numbers and multipliy by 2", function () {
       return localPromise.map(this.test.normalArray, v => v * 2).should.eventually.be.eql(this.test.resultNormalArray);
     });
-    it("maps promise array and multipliy by 2", function () {
+    it("promise array of numbers and multipliy by 2", function () {
       return localPromise
         .resolve(this.test.normalArray)
         .map(v => v * 2)
         .should.eventually.be.eql(this.test.resultNormalArray);
     });
-    it("maps array of promises and multipliy by 2", function () {
+    it("array of promises of numbers and multipliy by 2", function () {
       return localPromise
         .resolve(this.test.promiseArray)
         .map(v => v * 2)
         .should.eventually.be.eql(this.test.resultNormalArray);
     });
-    it("maps array of promises and multipliy by id", function () {
+    it("array of promises of numbers and multipliy by id", function () {
       return localPromise
         .resolve(this.test.promiseArray)
         .map((v, id) => v * id)
         .should.eventually.be.eql(this.test.resultMultiplyById);
+    });
+    it("array of promises and return array[id]", function () {
+      return localPromise
+        .resolve(this.test.promiseArray)
+        .map((v, id, arr) => arr[id])
+        .should.eventually.be.eql(this.test.normalArray);
     });
     it("maps array of promises and multipliy by id, the third rejected", function () {
       return localPromise
@@ -174,7 +262,7 @@ describe("Test", function () {
       return localPromise
         .resolve(this.test.promiseArrayInnerReject)
         .map((v, id) => v * id, {catchError: false})
-        .should.eventually.be.eql([0, 2, 3, 12, 20]);
+        .should.eventually.be.eql([0, 2, "ERROR", 12, 20]);
     });
     it("maps array of promises and multipliy by id, if result > 5 the callbacks throws", function () {
       return localPromise
