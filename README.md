@@ -224,9 +224,9 @@ result = await Promise.all(result.map(cb));//[1,2,3,4,5];
 #### Notes.
 * You can use sync functions to process the async data, and it will always returns a promise of an array with inner items already resolved no matter the cb returns a promise. 
 ### forEach.
-Like map and behaves just like **Array.prototype.forEach** but for iterables.
+Like map and behaves just like **Array.prototype.forEach** but for iterables not just arrays.
 
-The main difference is it behaves well with async cb, so it will wait until ends to resolves, Array.prototype.forEach doesn't
+The main difference is it behaves well with async cb, so it will wait until finishes to resolve, Array.prototype.forEach doesn't
 
 
 ### sequence.
