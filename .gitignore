@@ -1,3 +1,5 @@
+# avoid setup.sh
+setup.sh
 # Logs
 logs
 *.log
