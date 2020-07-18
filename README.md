@@ -110,8 +110,14 @@ the "force" argument, defines if you want a default even on rejection,
 
 Examples:
 ```js
-const response = await axios("someSlowUrl").then(({body})=>body).timeoutDefault(1000, "Nothing for now");
-const badResponse = await axios("some500Url").then(({body})=>body).timeoutDefault(1000, "Default response", true);
+const response = await axios("someSlowUrl")
+  .then(({body})=>body)
+  .timeoutDefault(1000, "Nothing for now");
+//will print "Nothing for now".
+const badResponse = await axios("some500Url")
+  .then(({body})=>body)
+  .timeoutDefault(1000, "Default response", true);
+//will print "Default response" because the default is forced
 ```
 
 ##Wrapper...
