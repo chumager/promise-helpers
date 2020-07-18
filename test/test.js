@@ -6,7 +6,8 @@ const {
     PromiseIterableError,
     PromiseTimeoutDefaultError,
     PromiseKeyNotFound,
-    PromiseMaxIterationsError
+    PromiseMaxIterationsError,
+    PromiseMapError
   },
   wrapper
 } = require("../");
@@ -285,6 +286,20 @@ the callbacks throws with catchError false", function () {
             return res;
           },
           {catchError: false}
+        )
+        .should.eventually.be.rejectedWith(PromiseMapError, "ERROR");
+    });
+    it("maps array of promises and multipliy by id, if result > 10 \
+the callbacks throws with catchError false and parallel false", function () {
+      return localPromise
+        .resolve(this.test.promiseArray)
+        .map(
+          async (v, id) => {
+            const res = v * id;
+            if (res > 10) throw "ERROR";
+            return res;
+          },
+          {catchError: false, parallel: false}
         )
         .should.eventually.be.eql([0, 2, 6, "ERROR", "ERROR"]);
     });

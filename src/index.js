@@ -88,7 +88,7 @@ wrapper("uncatch", {
 });
 //Map
 wrapper("map", {
-  async Static(iterable, cb, {catchError = true} = {}) {
+  async Static(iterable, cb, {catchError = true, parallel = true} = {}) {
     const result = [];
     let id = 0;
     try {
@@ -100,17 +100,13 @@ wrapper("map", {
       for (let prom of iterable) {
         try {
           prom = await prom;
-          result.push(await cb(prom, id, iterable));
+          if (parallel) result.push(cb(prom, id, iterable));
+          else result.push(await cb(prom, id, iterable));
         } catch (err) {
           if (catchError) {
-            if (err instanceof Error) {
-              err.args = {
-                iterable,
-                id,
-                result
-              };
-            }
-            return this.reject(err);
+            return this.reject(
+              createError("PromiseMapError", "some callback trows an error", {iterable, id, result, err})
+            );
           }
           result.push(err);
         } finally {
@@ -118,9 +114,10 @@ wrapper("map", {
         }
       }
     } catch (err) {
-      return this.reject(err);
+      if (err instanceof errors.PromiseIterableError) throw err;
+      return this.reject(createError("PromiseMapError", "some callback or iterable rejects", {iterable, id, result, err}));
     }
-    return result;
+    return parallel ? this.all(result) : result;
   }
 });
 //sequence

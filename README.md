@@ -163,12 +163,14 @@ const result = await array.then(array=>array.map(someFunctionReturningPromises))
 Signature:
 ```js
 //Static
-Promise.map(iterable, cb, {catchError: true});
+Promise.map(iterable, cb, {catchError: true, parallel: true});
 //method.
-somePromiseIterable.map(cb, {catchError: true});
+somePromiseIterable.map(cb, {catchError: true, parallel: true});
 ```
 If **catchError** is false then will fulfilled with the fulfilled cb and errors. 
 If true (the default) then it will throw an instance of **PromiseMapError** with an arg object containing {iterable, id, result, err}.
+
+If **parallel** is false the iteration will wait until cb resolves and then will be pushed to the array. When true the error could not be catched in the iteration so it will be catch in the Promise.all return so you can only get the first error.
 
 Being:
 * iterable, the result of the iterable after resolving.
@@ -192,14 +194,14 @@ The same example but with vanilla js.
 //a cb that works with async values
 const cb = async v=>{
   let result = await v;
-  return result +1;
+  return result + 1;
 };
 //a promise that returns an array or promises.
 const array = Promise.result([...Array.keys(Array(5))].map(v=>Promise.resolve(v)));
 let result = await array;
 result = await Promise.all(result.map(cb));//[1,2,3,4,5];
 ```
-##Wrapper...
+## Wrapper...
 All the helpers definition comes from a wrapper function.
 The signature is
 ```js
