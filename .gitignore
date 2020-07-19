@@ -1,5 +1,7 @@
 # avoid setup.sh
 setup.sh
+# avoid local test
+test.js
 # Logs
 logs
 *.log

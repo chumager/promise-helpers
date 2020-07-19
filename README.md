@@ -32,7 +32,7 @@ fetch("someURL")
     }
   )
 ```
-The .get("json").exec() repeats? no problemo amigo... let's wrap a new method
+The .get("json").exec() repeats? No problemo amigo... Lets wrap a new method
 ```js
 wrapper("json", {
   Method(){
@@ -49,6 +49,27 @@ fetch("someURL")
     fetch(url)
       .json()
       .timeout(2000, `URL: ${url} took more than 2000ms`),
+    {
+      atLeast: 1000, 
+      parallel: false
+    }
+  )
+```
+all your fetch has timeout?
+```js
+wrapper("jsonT", {
+  Method(timeout, msg = "fetch took too long"){
+    return this.json().timeout(timeout, msg);
+  }
+});
+```
+resulting:
+```js
+fetch("someURL")
+  .jsonT(1000, "first request took too long")
+  .map(url=>
+    fetch(url)
+      .jsonT(2000, `URL: ${url} took more than 2000ms`),
     {
       atLeast: 1000, 
       parallel: false
@@ -168,31 +189,6 @@ const response = await axios("someURL")
   .timeoutDefault(1000, "no response");
 //will print the data if it's fast enough or "no response" if it's slow
 ```
-### uncatch.
-
-Sometimes you just want to pass through the result, and don't care for errors because the receiver take care.
-
-Signature:
-```js
-//Static
-Promise.reject(value).uncatch();
-//Method
-somePromise.uncatch();
-```
-Examples:
-```js
-//the receiver function will take care.
-const result = axios("someBadResponseUrl);
-//later...
-const parser = await receiver.uncatch();
-if (parser instanceof Error){
-  //do something with the error
-} else {
-  //do somethinf with the result
-}
-```
-This is an anti pattern approach because you should use try/catch or .then(res, rej) and should document this behavior.
-
 ### map.
 Made to simplify the Promise.all/map process. 
 
@@ -211,10 +207,10 @@ Promise.map(iterable, cb, {catchError: true, parallel: true});
 //method.
 somePromiseIterable.map(cb, {catchError: true, parallel: true});
 ```
-If **catchError** is false then will fulfilled with the fulfilled cb and errors. 
+If **catchError** is false then will fulfilled with the fulfilled cb and errors, it only works well with parallel false, otherwise the error is rejected in Promise.all.. 
 If true (the default) then it will throw an instance of **PromiseMapError** with an arg object containing {iterable, id, result, err}.
 
-If **parallel** is false the iteration will wait until cb resolves and then will be pushed to the array. When true the error could not be catched in the iteration so it will be catch in the Promise.all return so you can only get the first error.
+If **parallel** is false the iteration will wait until cb resolves and then will be pushed to the array. When true (default) the error could not be catch in the iteration so it will be catch in the Promise.all return so you can only get the first error.
 
 Being:
 * iterable, the result of the iterable after resolving.
@@ -252,7 +248,46 @@ Like map and behaves just like **Array.prototype.forEach** but for iterables not
 
 The main difference is it behaves well with async cb, so it will wait until finishes to resolve, Array.prototype.forEach doesn't
 
+The problem...
+```js
+async function main() {
+  console.log("start");
+  const arr = [1, 2, 3, 4, 5];
+  await arr.forEach(async v => {
+    const res = await new Promise(res => setTimeout(res, 100, v));
+    console.log(res);
+  });
+  console.log("end");
+}
+main();
+```
 
+Doesn't work as expected, because the loop in forEach doesn't care about async operations...
+
+The fix...
+```js
+async function main() {
+  console.log("start");
+  const arr = Promise.resolve([1, 2, 3, 4, 5]);
+  await arr.forEach(async v => {
+    const res = await Promise.delay(500, v);
+    console.log(res);
+  });
+  console.log("end");
+}
+main();
+//or...
+async function main() {
+  console.log("start");
+  const arr = [1, 2, 3, 4, 5];
+  await Promise.forEach(arr, async v => {
+    const res = await Promise.delay(500, v);
+    console.log(res);
+  });
+  console.log("end");
+}
+main();
+```
 ### sequence.
 This is designed for High Abstraction Level, when you don't know what's coming, so you send your slaves to work...
 In simple terms it's like a map with a callback who executes the iterator, as it's name, in sequence... But it also accepts numbers to make a delay in between.
@@ -270,7 +305,80 @@ Like map, catchError has the same behavior.
 ### sequenceAllSettled
 Like sequence but when you want yo know the status of the promise and the value o reject reason, just like Promise.allSettled, obviously it has no catchError.
 
+### reduce.
+Just like **Array.prototype.reduce*** but supports sync cb with resolved result and iterator. It behaves like map supporting delay, atLeast and timeout, obviously without parallel, because it works in sequence.
 
+### waterfall.
+When you have a sequence of functions that have to chain the result. It's meant to High Abstraction Leven when you don't know what's coming or just want to keep your code in order.
+
+When you know, the pattern is:
+```js
+Promise.resolve(initVal)
+  .then(func1)
+  .then(func2)
+  .then(func3)
+  .then(func4)
+  .then(func5)
+```
+
+If you don't know.
+```js
+//some HOF returns a promise with an array of functions.
+someFunc().waterfall(initVal)
+```
+### get.
+Gets the value from a key of a promise returning an object.
+
+Normal pattern.
+```js
+const {data} = await axios(someURL);
+```
+Anti pattern
+```js
+const data = await axios(someURL).get("data");
+```
+The main difference is with the normal pattern if **data** doesn't exist you get undefined. With "get" you get an PromiseKeyNotFound error, and usually happens you misspell the keys names, and sometimes it takes forever to detect it. 
+
+### keys.
+Like **Object.keys** but for Promises... 
+
+Normal pattern:
+```js
+const obj = await somePromise;
+Object.keys(obj).someArrayFunction...
+```
+
+Anti pattern:
+```js
+await somePromise.keys().somePromiseFunction...
+```
+## call, apply and exec.
+Call and apply works just like the **Function.prototype** equals, exec works like **function(...args)**
+
+For example:
+
+Sometimes class functions depends on **this**, normal call won't work.
+```js
+class someClass {
+  constructor(v){
+    this.test = v;
+  }
+  myTest(){
+    console.log(this.test);
+  }
+}
+const myClass = new someClass("hello world");
+const {myTest} = myClass;
+myTest();//won't work becaus "this" doesn't exists"
+//this will do
+myTest.call(myClass);
+```
+so in case you depends on this, you could use call or apply in other cases can use exec.
+
+Example of exec.
+```js
+fetch(someUrl).get("json").exec();
+```
 
 ## Wrapper...
 All the helpers definition comes from a wrapper function.
