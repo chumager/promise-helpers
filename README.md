@@ -223,7 +223,7 @@ Examples:
 //a cb that works with no async values
 const cb = v=>v+1;
 //a promise that returns an array or promises.
-const array = Promise.result([...Array.keys(Array(5))].map(v=>Promise.resolve(v)));
+const array = Promise.resolve([...Array(5).keys()]).map(v=>Promise.resolve(v));
 const result = await array.map(cb);//[1,2,3,4,5];
 ```
 It helps to work with a promise returning an array of promises and "synchronous/asynchronous callback"
@@ -237,7 +237,7 @@ const cb = async v=>{
   return result + 1;
 };
 //a promise that returns an array or promises.
-const array = Promise.result([...Array.keys(Array(5))].map(v=>Promise.resolve(v)));
+const array = Promise.result([...Array(5).keys()]).map(v=>Promise.resolve(v));
 let result = await array;
 result = await Promise.all(result.map(cb));//[1,2,3,4,5];
 ```
@@ -352,7 +352,7 @@ Anti pattern:
 ```js
 await somePromise.keys().somePromiseFunction...
 ```
-## call, apply and exec.
+### call, apply and exec.
 Call and apply works just like the **Function.prototype** equals, exec works like **function(...args)**
 
 For example:
@@ -379,6 +379,64 @@ Example of exec.
 ```js
 fetch(someUrl).get("json").exec();
 ```
+### waitForKey
+Useful for non reactive objects, when other section of your code changes it and want to wait until the key appears.
+
+Signature:
+```js
+//Static
+Promise.waitForKey(obj, key, {ellapsed: 100, maxIterations: 1e4});
+//Method.
+somePromise(key, {ellapsed: 100, maxIterations: 1e4});
+```
+* ellapsed: the time to wait in each loop.
+* maxIterations: how many iterations until throws error if key hasn't appear in the object.
+
+Example:
+```js
+//in some place of your code.
+const obj = {};
+
+//creation key emulation.
+setTimeout(() => (obj.test = true), 400);
+
+//in some other place...
+const value = await Promise.waitForKey(obj, "test");
+```
+### waitForResult
+Imagine a super unstable service and need to get info from an endpoint, this is for you...
+
+Signature:
+```js
+//Static
+Promise.waitForResult(fn, {ellapsed = 100, delay, atLeast, maxIterations = 10000, retry = true, timeout} = {}, args = []) 
+//Method
+somePromiseFunction.waitForResult({ellapsed = 100, delay, atLeast, maxIterations = 10000, retry = true, timeout} = {}, args = []) 
+```
+Where:
+* ellapsed: the time in between execution.
+* delay, atLeast and timeout: normal behavior.
+* maxIterations: how many iterations before throws error.
+* retry: Boolean, default true, in case you want to keep executing even if the function throws error
+* args: an array of arguments to use with the function. This is to apply Promise.all to the argument.
+#### Note:
+it'll retry while the result is **undefined** otherwise it will return, so if you need to expect for other result you must implement it in your function.
+
+Example:
+```js
+//fetching data
+const result = await Promise.resolve(fetch, undefined, someURL).get("json").exec();
+
+//searching in the DOM.
+const search = id => {
+  let res = document.getElementById(id);
+  return res === null ? undefined : res;
+}
+Promise.waitForResult(search, undefined, ["myID"]).get("click").exec();
+//no await to avoid blocking next code.
+```
+#### Can I stop this?
+As the wrapper returns the resulting value I can't return a cancel function. Suggestions are welcome...
 
 ## Wrapper...
 All the helpers definition comes from a wrapper function.
@@ -394,17 +452,19 @@ Method|Function|Static|The Method to add, it is chained in the promise object.
 depends|Array|none|the other wrappers it depends on, for example you can create 3 wrappers and the 3rd depends on the other 2.
 ### Standard Signatures for Static and Method.
 appart of delay, almost all functions has this signature:
-```
+```js
 Static(prom: Promise, ...args: Any).
 ```
 With this signature you get automagically Method.
-```
+```js
 Method(...args: Any)
 ```
-For consistency with the class the ```Method``` function assumes ```this``` is the promise. 
+For consistency with the class, the **Method** function assumes **this** as the promise. 
 So if no Method function is given then Static is used like:
 ```js
 promise.prototype[name] = function(...args){
   return this.constructor[name](this, ...args);
 }
 ```
+## Final Notes.
+This is not **magic**, the way the interpreter works is with one thread and non blocking I/O, so don't expect to work delay, atLeast or timeout with a synchronous function, AFAIK the only way to convert sync to async is with working threads. The same will happens if your async function uses sync methods with high CPU processing.
