@@ -163,7 +163,7 @@ Promise.delay(500, "Hello World").timeout(1000, "ERROR").then(console.log);
 ```
 will print _Hello World_ because it resolves in 500ms and the timeout was 1000ms.
 ### timeoutDefault.
-Like **timeout** but supports a "default" value, so un case of timeout you can avoid the rejection and replace it with a default value.
+Like **timeout** but supports a "default" value, so in case of timeout you can avoid the rejection and replace it with a default value.
 
 Signature:
 ```js
@@ -465,6 +465,60 @@ So if no Method function is given then Static is used like:
 promise.prototype[name] = function(...args){
   return this.constructor[name](this, ...args);
 }
+```
+### Real examples.
+Suppose you have an express.js service with mongoose and several endpoints answer with res.JSON, but the operation could fail and need to respond well.
+```js
+wrapper("send", {
+  Static(prom, res){
+    prom.then(res.JSON, err=>{
+      res.status(500).JSON({status: "error", message: err.message || err});
+    });
+  }
+});
+//remember if there is no Method then Static is translated into Method.
+//now you can
+app.get("/API/Users",(req, res) => {
+    db.model("User").find(req.query).exec().send(res);
+});
+```
+The **exec** is assuming it's a Mongoose module.
+
+Now you have to inject some locals to your resulting documents in a query, you can do it with:
+```js
+wrapper("setLocals", {
+  async Static(prom, locals){
+    const res = await prom;
+    if(Array.isArray(res)){
+      res.forEach(doc=>doc.$locals = {...doc.$locals, ...locals});
+    } else {
+      res.$locals = {...res.$locals, ...locals};
+    }
+    return res;
+  }
+});
+//latter
+app.get("/API/TrxByDate", (req, res)=>{
+  db.model("Trx").find({status: "Finished"})
+    .exec()
+    .setLocals({date: req.query.date})
+    .send(res);
+});
+```
+So if you have some virtuals that depends on date locals, you will deliver the documents with the new virtual data.
+
+Finally, you have to process a query and make some changes in your documents, but when you have an error you don't know in which document, happens
+
+```js
+db.model("Project")
+  .find(someQuery)
+  .populate("investments")
+  .exec()
+  .get("investments")
+  .map(someProcessingFunction)
+  .catch(err=>{
+    //here err.args will have the id before throws, the result before throws and the err (error thrown from the operation).
+  });
 ```
 ## Final Notes.
 This is not **magic**, the way the interpreter works is with one thread and non blocking I/O, so don't expect to work delay, atLeast or timeout with a synchronous function, AFAIK the only way to convert sync to async is with working threads. The same will happens if your async function uses sync methods with high CPU processing.

@@ -202,15 +202,15 @@ wrapper("reduce", {
         throw createError("PromiseIterableError", "trying to use reduce without an iterable object", {
           iterable
         });
-      lastResult = result;
+      lastResult = result; //in case first iterator fails
       for await (const prom of iterable) {
-        lastResult = result;
+        lastResult = result; //in case the result fails
         result = this.resolve(cb(result, prom, id, iterable));
         delay && (result = result.delay(delay));
         atLeast && (result = result.atLeast(atLeast));
         timeout && (result = result.timeout(timeout));
         result = await result;
-        lastResult = result;
+        lastResult = result; //in case next iterator fails
         id++;
       }
     } catch (err) {

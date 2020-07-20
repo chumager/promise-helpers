@@ -1,6 +1,7 @@
 {
   "name": "@chumager/promise-helpers",
   "main": "dist/index.js",
+  "version": "1.0.0",
   "author": "Juan Carlos Muñoz <jcmunoz@itdmovil.cl>",
   "license": "MIT",
   "scripts": {
