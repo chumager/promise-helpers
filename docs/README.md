@@ -17,6 +17,7 @@ I love chaining, as almost all methods and statics returns promises (besides for
 Imagine a fetch who returns an array of url you must request but one by one, with some time restriction and at least some execution time
 
 ```javascript
+require("@chumager/promise-helpers").default();
 fetch("someURL")
   .timeout(1000, "first request took too long")
   .get("json")
@@ -34,6 +35,8 @@ fetch("someURL")
 ```
 The .get("json").exec() repeats? No problemo amigo... Lets wrap a new method
 ```javascript
+const {wrapper} = require("@chumager/promise-helpers");
+
 wrapper("json", {
   Method(){
     return this.get("json").exec();
