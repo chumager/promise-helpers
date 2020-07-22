@@ -1,4 +1,7 @@
 const PromiseDelay = Symbol("PromiseDelay");
+function setName(func, name) {
+  Object.defineProperty(func, "name", {value: name});
+}
 let functions = {};
 function wrapper(name, {Static, Method, depends = []}) {
   const fn = (localPromise = Promise, force = false) => {
@@ -6,12 +9,14 @@ function wrapper(name, {Static, Method, depends = []}) {
       functions[depend](localPromise);
     });
     if (Method) {
+      setName(Method, "name", name);
       if (!localPromise.prototype[name] || force) {
         localPromise.prototype[name] = Method;
       }
     }
     if (Static) {
       if (!localPromise[name] || force) {
+        setName(Static, name);
         localPromise[name] = Static;
       }
       if (!localPromise.prototype[name]) {
@@ -19,18 +24,26 @@ function wrapper(name, {Static, Method, depends = []}) {
         localPromise.prototype[name] = function (...args) {
           return this.constructor[name](this, ...args);
         };
+        setName(localPromise.prototype[name], name);
       }
     }
   };
   functions[name] = fn;
   return fn;
 }
+wrapper("resolvePromise", {
+  Static(prom) {
+    return this.resolve(prom).then(prom => (typeof prom === "function" ? prom() : prom));
+  }
+});
 wrapper("delay", {
   Static(time = 100, value) {
-    return new this((res, rej) => {
-      setTimeout(res, time, value);
-      this.resolve(value).catch(rej);
-    });
+    return this.resolvePromise(value).then(
+      result =>
+        new this(res => {
+          setTimeout(res, time, result);
+        })
+    );
   },
   Method(time = 100) {
     const promise = this.constructor;
@@ -39,47 +52,75 @@ wrapper("delay", {
 });
 wrapper("atLeast", {
   Static(prom, time = 100) {
-    const start = Date.now();
-    return this.resolve(prom).then(val => {
-      const diff = Date.now() - start;
-      if (time > diff) return new this(res => setTimeout(res, time - diff, val));
-      return val;
-    });
-  }
+    return this.resolve(this.all([this.resolvePromise(prom), this.delay(time)]).get(0));
+  },
+  depends: ["get", "delay"]
 });
 wrapper("timeout", {
   Static(prom, time, error) {
     if (typeof time !== "number") {
       throw createError("PromiseTimeoutError", "time is not a number");
     }
-    return new this((res, rej) => {
-      setTimeout(() => {
-        rej(createError("PromiseTimeoutError", error || `Promise timeout in ${time}ms`, {time}));
-      }, time);
-      const Prom = typeof prom === "function" ? prom : () => prom;
-      this.resolve(Prom()).then(res, rej);
-    });
-  }
+    return this.race([
+      this.resolvePromise(prom),
+      this.delay(time).then(() => {
+        if (typeof prom?.cancel === "function") {
+          prom.cancel();
+        }
+        return this.reject(createError("PromiseTimeoutError", error || `Promise timeout in ${time}ms`, {time}));
+      })
+    ]);
+  },
+  depemds: ["delay"]
 });
 wrapper("timeoutDefault", {
   async Static(prom, time = 100, value, force = false) {
     if (typeof value === "undefined")
-      return this.reject(createError("PromiseTimeoutDefaultError", "there is no default for timeoutDefault"));
+      throw createError("PromiseTimeoutDefaultError", "there is no default for timeoutDefault");
     try {
       return await this.timeout(prom, time);
     } catch (err) {
       if (err instanceof errors.PromiseTimeoutError || force) return value;
-      return this.reject(err);
+      throw err;
     }
   },
   depemds: ["timeout"]
+});
+wrapper("attachTimers", {
+  async Static(prom, {delay, atLeast, timeout} = {}) {
+    //check con coherence.
+    if (delay && atLeast && delay >= atLeast)
+      throw createError("PromiseTimersCoherenceError", "atLeast must be greather than delay", {
+        delay,
+        atLeast,
+        timeout
+      });
+    if (delay && timeout && delay >= timeout)
+      throw createError("PromiseTimersCoherenceError", "timeout must be greather than delay", {
+        delay,
+        atLeast,
+        timeout
+      });
+    if (atLeast && timeout && atLeast >= timeout)
+      throw createError("PromiseTimersCoherenceError", "timeout must be greather than atLeast", {
+        delay,
+        atLeast,
+        timeout
+      });
+    prom = this.resolve(prom);
+    atLeast && prom.atLeast(atLeast);
+    timeout && prom.timeout(timeout);
+    delay && prom.delay(delay);
+    return prom;
+  },
+  depends: ["delay", "atLeast", "timeout"]
 });
 wrapper("map", {
   async Static(iterable, cb, {catchError = true, parallel = true, delay, atLeast, timeout} = {}) {
     const result = [];
     let id = 0;
     try {
-      iterable = await iterable;
+      iterable = await this.resolvePromise(iterable);
       if (!iterable[Symbol.iterator])
         throw createError("PromiseIterableError", "trying to use map without an iterable object", {
           iterable
@@ -87,10 +128,7 @@ wrapper("map", {
       for (let prom of iterable) {
         try {
           prom = await prom;
-          let res = this.resolve(cb(prom, id, iterable));
-          if (delay) res = res.delay(delay);
-          if (atLeast) res = res.atLeast(atLeast);
-          if (timeout) res = res.timeout(timeout);
+          let res = this.resolve(cb(prom, id, iterable)).attachTimers({delay, atLeast, timeout});
           if (parallel) result.push(res);
           else result.push(await res);
         } catch (err) {
@@ -112,7 +150,7 @@ wrapper("map", {
     }
     return parallel ? this.all(result) : result;
   },
-  depends: ["delay", "atLeast", "timeout"]
+  depends: ["attachTimers"]
 });
 wrapper("forEach", {
   async Static(iterable, cb, {parallel = true, delay, atLeast, timeout} = {}) {
@@ -178,13 +216,15 @@ wrapper("sequenceAllSettled", {
       }, []);
     } catch (error) {
       if (error instanceof errors.PromiseMapError) {
-        const {iterable, id, result, err} = error;
-        return this.reject(createError("PromiseSequenceError", "some callback or iterable throws error"), {
-          iterable,
-          id,
-          result,
-          err
-        });
+        const {iterable, id, result, err} = error.args;
+        return this.reject(
+          createError("PromiseSequenceError", "some callback or iterable throws error", {
+            iterable,
+            id,
+            result,
+            err
+          })
+        );
       } else return this.reject(error);
     }
   },
@@ -205,10 +245,7 @@ wrapper("reduce", {
       lastResult = result; //in case first iterator fails
       for await (const prom of iterable) {
         lastResult = result; //in case the result fails
-        result = this.resolve(cb(result, prom, id, iterable));
-        delay && (result = result.delay(delay));
-        atLeast && (result = result.atLeast(atLeast));
-        timeout && (result = result.timeout(timeout));
+        result = this.resolve(cb(result, prom, id, iterable)).attachTimers({delay, atLeast, timeout});
         result = await result;
         lastResult = result; //in case next iterator fails
         id++;
@@ -250,6 +287,7 @@ wrapper("waterfall", {
 wrapper("get", {
   async Static(prom, key) {
     const result = await prom;
+    key = await key;
     if (key in result) return result[key];
     throw createError("PromiseKeyNotFound", `key ${key} not found`, {result, key});
   }
@@ -285,14 +323,19 @@ wrapper("exec", {
 });
 wrapper("waitForKey", {
   async Static(obj, key, {ellapsed = 100, maxIterations = 10000} = {}) {
-    key = await key;
-    if (key in obj) return obj[key];
-    --maxIterations;
-    if (maxIterations < 0) throw createError("PromiseMaxIterationsError", "Max iterations have been reached");
-    await this.delay(ellapsed);
-    return this.waitForKey(obj, key, {ellapsed, maxIterations});
+    try {
+      return await this.resolve(obj).get(key);
+    } catch (error) {
+      if (error.name === "PromiseKeyNotFound") {
+        --maxIterations;
+        if (maxIterations < 0) throw createError("PromiseMaxIterationsError", "Max iterations have been reached");
+        await this.delay(ellapsed);
+        return this.waitForKey(obj, key, {ellapsed, maxIterations});
+      }
+      throw error;
+    }
   },
-  depens: ["delay"]
+  depens: ["delay", "get"]
 });
 wrapper("waitForResult", {
   async Static(fn, {ellapsed = 100, delay, atLeast, maxIterations = 10000, retry = true, timeout} = {}, args = []) {

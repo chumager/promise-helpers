@@ -1,8 +1,22 @@
 {
   "name": "@chumager/promise-helpers",
   "main": "dist/index.js",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Juan Carlos Muñoz <jcmunoz@itdmovil.cl>",
+  "description": "Promise Helpers",
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chumager/promise-helpers.git"
+  },
+  "keywords": [
+    "promise",
+    "async",
+    "await",
+    "async/await"
+  ],
   "license": "MIT",
   "scripts": {
     "setup": "./setup.sh",
@@ -19,6 +33,7 @@
     "@babel/plugin-proposal-optional-chaining": "^7.10.4",
     "@babel/preset-env": "^7.10.4",
     "@yarnpkg/pnpify": "^2.0.0-rc.25",
+    "axios": "^0.19.2",
     "babel-eslint": "^10.1.0",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",

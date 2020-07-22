@@ -20,7 +20,6 @@ const chai = require("chai");
 const chaiAsPromised = require("chai-as-promised");
 chai.use(chaiAsPromised);
 chai.should();
-
 describe("Test", function () {
   this.slow(1);
   beforeEach(function () {
@@ -59,22 +58,47 @@ describe("Test", function () {
     it("static 100ms", function () {
       return localPromise.delay(100).should.be.fulfilled;
     });
-    it("100ms", function () {
-      return localPromise.resolve(1).delay(100).should.be.fulfilled;
+    it("static with function 100ms", function () {
+      return localPromise.delay(100, () => 1).should.eventually.be.eq(1);
+    });
+    it("static with function returning promise 100ms", function () {
+      return localPromise.delay(100, () => localPromise.resolve(1)).should.eventually.be.eq(1);
+    });
+    it("static chained 5x20ms", function () {
+      return localPromise.delay(20).delay(20).delay(20).delay(20).delay(20).should.be.fulfilled;
     });
     it("static with rejected value", function () {
+      return localPromise.delay(100, localPromise.reject("ERROR")).should.eventually.be.rejectedWith("ERROR");
+    });
+    it("static with rejected function", function () {
+      return localPromise.delay(100, () => localPromise.reject("ERROR")).should.eventually.be.rejectedWith("ERROR");
+    });
+    it("static with thrown sync function", function () {
       return localPromise
-        .delay(100, localPromise.reject("ERROR"))
-        .delay(100)
+        .delay(100, () => {
+          throw "ERROR";
+        })
         .should.eventually.be.rejectedWith("ERROR");
     });
-    it("static behaves well with thrown value", function () {
-      let prom = new Promise(() => {
-        throw "ERROR";
-      });
-      return localPromise.delay(100, prom).delay(100).should.eventually.be.rejectedWith("ERROR");
+    it("method 100ms", function () {
+      return localPromise.resolve(1).delay(100).should.eventually.be.eq(1);
     });
-    it("after rejection", function () {
+    it("method with function 100ms", function () {
+      return localPromise
+        .resolve(() => 1)
+        .delay(100)
+        .should.eventually.be.eq(1);
+    });
+    it("method with function returning promise 100ms", function () {
+      return localPromise
+        .resolve(() => localPromise.resolve(1))
+        .delay(100)
+        .should.eventually.be.eq(1);
+    });
+    it("method chained 5x20ms", function () {
+      return localPromise.resolve(1).delay(20).delay(20).delay(20).delay(20).delay(20).should.eventually.be.eq(1);
+    });
+    it("method after rejection in chain", function () {
       return localPromise.reject("ERROR").delay(100).delay(100).should.eventually.be.rejectedWith("ERROR");
     });
     it("reject after delay, with delay chains after", function () {
@@ -113,11 +137,14 @@ describe("Test", function () {
     });
   });
   describe("AtLeast", function () {
-    it("100ms", function () {
-      return localPromise.resolve(1).atLeast(100).should.be.fulfilled;
+    it("Static 100ms", function () {
+      return localPromise.atLeast(1, 10).should.be.eventually.eq(1);
+    });
+    it("Method 100ms", function () {
+      return localPromise.resolve(1).atLeast(10).should.be.eventually.eq(1);
     });
     it("after rejection", function () {
-      return localPromise.reject("ERROR").atLeast(100).atLeast(100).should.eventually.be.rejectedWith("ERROR");
+      return localPromise.reject("ERROR").atLeast(100).should.eventually.be.rejectedWith("ERROR");
     });
     it("reject chained with several atLeasts of 100ms", function () {
       return localPromise.reject("ERROR").atLeast(100).atLeast(100).atLeast(100).atLeast(100).atLeast(100).should
@@ -152,6 +179,9 @@ describe("Test", function () {
     });
     it("behaves well with rejection", function () {
       return localPromise.reject(50).timeout(100).should.be.rejectedWith(50);
+    });
+    it("rejected with timeout chain", function () {
+      return localPromise.reject(false).timeout(100).timeout(200).should.be.rejectedWith(false);
     });
     it("rejects after 100ms", function () {
       return localPromise.delay(600).timeout(100).should.be.rejected;
@@ -213,11 +243,16 @@ describe("Test", function () {
     it("array of numbers and multipliy by 2", function () {
       return localPromise.map(this.test.normalArray, v => v * 2).should.eventually.be.eql(this.test.resultNormalArray);
     });
-    it("array of numbers and multipliy by id with inverted delay returns well in around 230ms", function () {
+    it("array of numbers and multipliy by id with inverted delay returns well in \
+around 230ms, parallel false", function () {
       return localPromise
-        .map(this.test.normalArray, async (v, id) => {
-          return await localPromise.resolve(v * id).delay((1 / v) * 100);
-        })
+        .map(
+          this.test.normalArray,
+          async (v, id) => {
+            return await localPromise.resolve(v * id).delay((1 / v) * 100);
+          },
+          {parallel: false}
+        )
         .should.eventually.be.eql(this.test.resultMultiplyById);
     });
     it("array of numbers and multipliy by id with inverted delay in parallel \
@@ -453,7 +488,7 @@ the callbacks throws with catchError false and parallel false", function () {
     });
   });
   describe("SequenceAllSettled", function () {
-    it("resolves around 100ms with 5 delays of 20ms", function () {
+    it("resolves around 100ms with global delay  of 20ms", function () {
       return localPromise
         .sequenceAllSettled([() => 1, () => 2, () => 3, () => 4, () => 5], {delay: 20})
         .should.eventually.eql([
@@ -486,19 +521,19 @@ the callbacks throws with catchError false and parallel false", function () {
           {status: "fulfilled", value: 5}
         ]);
     });
-    it("resolves around 100ms with 5 delays of 20ms and atLeast of 10ms", function () {
+    it("rejects around 100ms with 5 delays of 20ms and atLeast of 10ms (timers coherence)", function () {
+      const arr = [() => 1, () => 2, () => 3, () => 4, () => 5];
       return localPromise
-        .sequenceAllSettled([() => 1, () => 2, () => 3, () => 4, () => 5], {
+        .sequenceAllSettled(arr, {
           delay: 20,
           atLeast: 10
         })
-        .should.eventually.eql([
-          {status: "fulfilled", value: 1},
-          {status: "fulfilled", value: 2},
-          {status: "fulfilled", value: 3},
-          {status: "fulfilled", value: 4},
-          {status: "fulfilled", value: 5}
-        ]);
+        .should.eventually.rejectedWith(PromiseSequenceError)
+        .to.have.nested.property("args", {
+          id: 0,
+          result: [],
+          iterable: arr
+        });
     });
     it("behaves well with rejected promises", function () {
       return localPromise
@@ -594,6 +629,14 @@ the callbacks throws with catchError false and parallel false", function () {
       const obj = {};
       setTimeout(() => (obj.test = true), 400);
       return localPromise.waitForKey(obj, "test").should.eventually.be.eql(true);
+    });
+    it("inner assign key after 400ms and resolves", function () {
+      const obj = new localPromise(res => {
+        const obj = {};
+        setTimeout(() => (obj.test = true), 400);
+        res(obj);
+      });
+      return obj.waitForKey("test").should.eventually.be.eql(true);
     });
     it("rejects after 2 iterations", function () {
       const obj = {};

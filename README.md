@@ -16,7 +16,7 @@ I love chaining, as almost all methods and statics returns promises (besides for
 
 Imagine a fetch who returns an array of url you must request but one by one, with some time restriction and at least some execution time
 
-```js
+```javascript
 fetch("someURL")
   .timeout(1000, "first request took too long")
   .get("json")
@@ -33,15 +33,15 @@ fetch("someURL")
   )
 ```
 The .get("json").exec() repeats? No problemo amigo... Lets wrap a new method
-```js
+```javascript
 wrapper("json", {
   Method(){
     return this.get("json").exec();
   }
-});
+})(Promise);
 ```
 resulting:
-```js
+```javascript
 fetch("someURL")
   .timeout(1000, "first request took too long")
   .json()
@@ -56,15 +56,15 @@ fetch("someURL")
   )
 ```
 all your fetch has timeout?
-```js
+```javascript
 wrapper("jsonT", {
   Method(timeout, msg = "fetch took too long"){
     return this.json().timeout(timeout, msg);
   }
-});
+})(Promise);
 ```
 resulting:
-```js
+```javascript
 fetch("someURL")
   .jsonT(1000, "first request took too long")
   .map(url=>
@@ -78,10 +78,11 @@ fetch("someURL")
 ```
 
 That's why I create this module and obviously I use it in all my develops.
-
+### Notes.
+Every helper should be able to process sync/async/function values, sync/async parameters/callbacks and always return a promise object instance of the promise you use to attach the helpers, so in case you find some problem chaining or resolving, please add an issue to the repository. 
 ## If you hate modify primitives.
 For some the primitives are untouchable... I'm not agree with that but I understood. So before you discard this module you can use an extended promise class to avoid it.
-```js
+```javascript
 global.localPromise = class extends Promise {};
 ```
 And then apply the module to your new Promise object.
@@ -90,7 +91,7 @@ And then apply the module to your new Promise object.
 yarn add @chumager/promise-helpers
 ```
 In your code:
-```js
+```javascript
 const {default: PromiseHelpers} = require("@chumager/promise-helpers");
 //with global Promise.
 PromiseHelpers();
@@ -104,42 +105,42 @@ Several functions only works as prototype, so if you're going to use a only func
 ### delay.
 As static this helper return a promise delayed by time ms and with a optional value.
 The signature is:
-```js
+```javascript
 Promise.delay(time[, value]);
 //or
 somePromise.delay(time);
 ```
 #### Examples.
-```js
+```javascript
 Promise.delay(1000, "Hello World").then(console.log);
 ```
 will print _Hello World_ after 1000ms.
 
 As method it helps to delay a promise to the next chain fulfilled.
-```js
+```javascript
 somePromise.delay(1000).then(console.log);
 ```
 will print the result of somePromise.
 In case of a rejected promise it'll not delay the rejection.
-```js
+```javascript
 Promise.reject("ERROR").delay(1000).catch(console.log);
 ```
 Should return in the end of current loop.
 ### atLeast.
 Like delay but it waits at least, useful if you want to set some order in the delivery or need to deliver in some time.
 Signature:
-```js
+```javascript
 Promise.atLeast(somePromise, time);
 //or
 somePromise.atLeast(time);
 ```
 example: 
-```js
+```javascript
 Promise.resolve("Hello World").atLeast(1000).then(console.log);
 ```
 Will print _Hello World_ in around 1000 ms.
 
-```js
+```javascript
 Promise.delay(1000, "Hello World").atLeast(500).then(console.log);
 ```
 Will print _Hello World_ in around 1000 ms.
@@ -147,18 +148,18 @@ Will print _Hello World_ in around 1000 ms.
 Waits until the timeout to rejects, if the promise is resolved before then it chains the result.
 
 Signature:
-```js
+```javascript
 Promise.timeout(somePromise, time=100[,error]);
 somePromise.timeout(time[, error]);
 ```
 error is the value for the rejection, if not set then a instance of **PromiseTimeoutError** with the message **Promise timeout in ${time}ms** will be the rejected value.
 
 Examples:
-```js
+```javascript
 Promise.delay(1000, "nothing").timeout(500).catch(console.error);
 ```
 Will reject the promise because it took more than 500ms in resolve.
-```js
+```javascript
 Promise.delay(500, "Hello World").timeout(1000, "ERROR").then(console.log);
 ```
 will print _Hello World_ because it resolves in 500ms and the timeout was 1000ms.
@@ -166,7 +167,7 @@ will print _Hello World_ because it resolves in 500ms and the timeout was 1000ms
 Like **timeout** but supports a "default" value, so in case of timeout you can avoid the rejection and replace it with a default value.
 
 Signature:
-```js
+```javascript
 Promise.timeoutDefault(something, time=100, default, force=false);
 //or
 somePromise.timeoutDefault(time=100, default, force=false);
@@ -174,7 +175,7 @@ somePromise.timeoutDefault(time=100, default, force=false);
 the "force" argument, defines if you want a default even on rejection,
 
 Examples:
-```js
+```javascript
 const response = await axios("someSlowUrl")
   .then(({data})=>data)
   .timeoutDefault(1000, "Nothing for now");
@@ -193,15 +194,15 @@ const response = await axios("someURL")
 Made to simplify the Promise.all/map process. 
 
 Normal pattern for array
-```js
+```javascript
 const result = await Promise.all(array.map(someFunctionReturningPromises));
 ```
 For a promise that returns an array.
-```js
+```javascript
 const result = await array.then(array=>array.map(someFunctionReturningPromises));
 ```
 Signature:
-```js
+```javascript
 //Static
 Promise.map(iterable, cb, {catchError: true, parallel: true});
 //method.
@@ -219,7 +220,7 @@ Being:
 * err, the error returned by the callback
 
 Examples:
-```js
+```javascript
 //a cb that works with no async values
 const cb = v=>v+1;
 //a promise that returns an array or promises.
@@ -230,7 +231,7 @@ It helps to work with a promise returning an array of promises and "synchronous/
 
 The same example but with vanilla js.
 
-```js
+```javascript
 //a cb that works with async values
 const cb = async v=>{
   let result = await v;
@@ -249,7 +250,7 @@ Like map and behaves just like **Array.prototype.forEach** but for iterables not
 The main difference is it behaves well with async cb, so it will wait until finishes to resolve, Array.prototype.forEach doesn't
 
 The problem...
-```js
+```javascript
 async function main() {
   console.log("start");
   const arr = [1, 2, 3, 4, 5];
@@ -265,7 +266,7 @@ main();
 Doesn't work as expected, because the loop in forEach doesn't care about async operations...
 
 The fix...
-```js
+```javascript
 async function main() {
   console.log("start");
   const arr = Promise.resolve([1, 2, 3, 4, 5]);
@@ -293,7 +294,7 @@ This is designed for High Abstraction Level, when you don't know what's coming, 
 In simple terms it's like a map with a callback who executes the iterator, as it's name, in sequence... But it also accepts numbers to make a delay in between.
 
 Signature:
-```js
+```javascript
 //Static
 Promise.sequence(IteratorOfFunctions, {catchError: true, delay: null, atLeast: null})
 //Method.
@@ -312,7 +313,7 @@ Just like **Array.prototype.reduce*** but supports sync cb with resolved result 
 When you have a sequence of functions that have to chain the result. It's meant to High Abstraction Leven when you don't know what's coming or just want to keep your code in order.
 
 When you know, the pattern is:
-```js
+```javascript
 Promise.resolve(initVal)
   .then(func1)
   .then(func2)
@@ -322,7 +323,7 @@ Promise.resolve(initVal)
 ```
 
 If you don't know.
-```js
+```javascript
 //some HOF returns a promise with an array of functions.
 someFunc().waterfall(initVal)
 ```
@@ -330,11 +331,11 @@ someFunc().waterfall(initVal)
 Gets the value from a key of a promise returning an object.
 
 Normal pattern.
-```js
+```javascript
 const {data} = await axios(someURL);
 ```
 Anti pattern
-```js
+```javascript
 const data = await axios(someURL).get("data");
 ```
 The main difference is with the normal pattern if **data** doesn't exist you get undefined. With "get" you get an PromiseKeyNotFound error, and usually happens you misspell the keys names, and sometimes it takes forever to detect it. 
@@ -343,13 +344,13 @@ The main difference is with the normal pattern if **data** doesn't exist you get
 Like **Object.keys** but for Promises... 
 
 Normal pattern:
-```js
+```javascript
 const obj = await somePromise;
 Object.keys(obj).someArrayFunction...
 ```
 
 Anti pattern:
-```js
+```javascript
 await somePromise.keys().somePromiseFunction...
 ```
 ### call, apply and exec.
@@ -358,7 +359,7 @@ Call and apply works just like the **Function.prototype** equals, exec works lik
 For example:
 
 Sometimes class functions depends on **this**, normal call won't work.
-```js
+```javascript
 class someClass {
   constructor(v){
     this.test = v;
@@ -376,14 +377,14 @@ myTest.call(myClass);
 so in case you depends on this, you could use call or apply in other cases can use exec.
 
 Example of exec.
-```js
+```javascript
 fetch(someUrl).get("json").exec();
 ```
 ### waitForKey
 Useful for non reactive objects, when other section of your code changes it and want to wait until the key appears.
 
 Signature:
-```js
+```javascript
 //Static
 Promise.waitForKey(obj, key, {ellapsed: 100, maxIterations: 1e4});
 //Method.
@@ -393,7 +394,7 @@ somePromise(key, {ellapsed: 100, maxIterations: 1e4});
 * maxIterations: how many iterations until throws error if key hasn't appear in the object.
 
 Example:
-```js
+```javascript
 //in some place of your code.
 const obj = {};
 
@@ -407,7 +408,7 @@ const value = await Promise.waitForKey(obj, "test");
 Imagine a super unstable service and need to get info from an endpoint, this is for you...
 
 Signature:
-```js
+```javascript
 //Static
 Promise.waitForResult(fn, {ellapsed = 100, delay, atLeast, maxIterations = 10000, retry = true, timeout} = {}, args = []) 
 //Method
@@ -423,7 +424,7 @@ Where:
 it'll retry while the result is **undefined** otherwise it will return, so if you need to expect for other result you must implement it in your function.
 
 Example:
-```js
+```javascript
 //fetching data
 const result = await Promise.resolve(fetch, undefined, someURL).get("json").exec();
 
@@ -441,7 +442,7 @@ As the wrapper returns the resulting value I can't return a cancel function. Sug
 ## Wrapper...
 All the helpers definition comes from a wrapper function.
 The signature is
-```js
+```javascript
 wrapper(name: String, {Static: Function, Method: Function, depends: Array}).
 ```
 Argument|Type|Default|Definition|
@@ -452,30 +453,32 @@ Method|Function|Static|The Method to add, it is chained in the promise object.
 depends|Array|none|the other wrappers it depends on, for example you can create 3 wrappers and the 3rd depends on the other 2.
 ### Standard Signatures for Static and Method.
 appart of delay, almost all functions has this signature:
-```js
+```javascript
 Static(prom: Promise, ...args: Any).
 ```
 With this signature you get automagically Method.
-```js
+```javascript
 Method(...args: Any)
 ```
 For consistency with the class, the **Method** function assumes **this** as the promise. 
 So if no Method function is given then Static is used like:
-```js
+```javascript
 promise.prototype[name] = function(...args){
   return this.constructor[name](this, ...args);
 }
 ```
 ### Real examples.
+Remember wrapper is HOF and need a promise object to be attached.
+
 Suppose you have an express.js service with mongoose and several endpoints answer with res.JSON, but the operation could fail and need to respond well.
-```js
+```javascript
 wrapper("send", {
   Static(prom, res){
     prom.then(res.JSON, err=>{
       res.status(500).JSON({status: "error", message: err.message || err});
     });
   }
-});
+})(Promise);
 //remember if there is no Method then Static is translated into Method.
 //now you can
 app.get("/API/Users",(req, res) => {
@@ -485,7 +488,7 @@ app.get("/API/Users",(req, res) => {
 The **exec** is assuming it's a Mongoose module.
 
 Now you have to inject some locals to your resulting documents in a query, you can do it with:
-```js
+```javascript
 wrapper("setLocals", {
   async Static(prom, locals){
     const res = await prom;
@@ -496,7 +499,7 @@ wrapper("setLocals", {
     }
     return res;
   }
-});
+})(Promise);
 //latter
 app.get("/API/TrxByDate", (req, res)=>{
   db.model("Trx").find({status: "Finished"})
@@ -509,7 +512,7 @@ So if you have some virtuals that depends on date locals, you will deliver the d
 
 Finally, you have to process a query and make some changes in your documents, but when you have an error you don't know in which document, happens
 
-```js
+```javascript
 db.model("Project")
   .find(someQuery)
   .populate("investments")
