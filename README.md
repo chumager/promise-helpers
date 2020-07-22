@@ -105,4 +105,4 @@ PromiseHelpers(localPromise);
 ### Notes.
 Several functions only works as prototype, so if you're going to use a only function promise be aware it may not work.
 
-For more info about this module please refer to [The Project GitHub Page]("https://chumager.github.io/promise-helpers/")
+For more info about this module please refer to [The Project GitHub Page](https://chumager.github.io/promise-helpers/)
