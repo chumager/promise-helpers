@@ -163,6 +163,80 @@ Will reject the promise because it took more than 500ms in resolve.
 Promise.delay(500, "Hello World").timeout(1000, "ERROR").then(console.log);
 ```
 will print _Hello World_ because it resolves in 500ms and the timeout was 1000ms.
+#### Notes.
+Normally a promise it's not cancelable, but some are, this means the timeout will throw but no end the promise chained, no body can ;ó(.
+
+If your resulting promise has the **cancelable** function property, it'll be executed before throw a timeout exception.
+
+I hope this example helps.
+```javascript
+require("@chumager/promise-helpers").default();
+const axios = require("axios");
+//get Google Homepage
+function getGoogle(options = {}) {
+  const start = Date.now();
+  const result = axios("https://www.google.cl", options)
+    .get("data")
+    .then(data => {
+      //will show no matter the timeout
+      console.log("getGoogle", Date.now() - start, data.length);
+      return data;
+    });
+  return result;
+}
+//get Google Homepage but cancelable;
+function getCancelable() {
+  const {CancelToken} = axios;
+  let cancel;
+  const options = {
+    cancelToken: new CancelToken(c => (cancel = c))
+  };
+  //because the option the console.log will not get executed
+  const result = getGoogle(options);
+  result.cancel = cancel;
+  return result;
+}
+getGoogle()
+  .timeout(10)
+  .then(console.log, e => console.error("from normal:", e.message));
+getCancelable()
+  .timeout(10)
+  .then(console.log, e => console.error("from cancelable:", e.message));
+
+//timeout
+function timeout() {
+  const start = Date.now();
+  const result = new Promise(res => {
+    setTimeout(() => {
+      //always prints
+      console.log("timeout resolved", Date.now() - start);
+      res(true);
+    }, 1000);
+  });
+  return result;
+}
+//cancelable setTimeout
+function cancelableTimeout() {
+  const start = Date.now();
+  let cancel;
+  const result = new Promise(res => {
+    cancel = setTimeout(() => {
+      //no print if timeout reaches
+      console.log("cancelable resolved", Date.now() - start);
+      res(true);
+    }, 1000);
+  });
+  result.cancel = () => clearTimeout(cancel);
+  return result;
+}
+cancelableTimeout()
+  .timeout(100)
+  .then(console.log, e => console.error("from timeout:", e.message));
+timeout()
+  .timeout(100)
+  .then(console.log, e => console.error("from cancelableTimeout:", e.message));
+```
+Please REMEMBER almost all I/O modules has timeouts, so you should use the module pattern instead of adding a timeout chain.
 ### timeoutDefault.
 Like **timeout** but supports a "default" value, so in case of timeout you can avoid the rejection and replace it with a default value.
 
