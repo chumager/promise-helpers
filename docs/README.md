@@ -597,7 +597,8 @@ db.model("Project")
   .get("investments")
   .map(someProcessingFunction)
   .catch(err=>{
-    //here err.args will have the id before throws, the result before throws and the err (error thrown from the operation).
+    //here err.args will have the id before throws, the result 
+    //before throws and the err (error thrown from the operation).
   });
 ```
 ## Final Notes.
