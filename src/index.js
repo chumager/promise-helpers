@@ -80,7 +80,7 @@ wrapper("timeoutDefault", {
     try {
       return await this.timeout(prom, time);
     } catch (err) {
-      if (err instanceof errors.PromiseTimeoutError || force) return value;
+      if (err.name === "PromiseTimeoutError" || force) return value;
       throw err;
     }
   },
@@ -143,7 +143,7 @@ wrapper("map", {
         }
       }
     } catch (err) {
-      if (err instanceof errors.PromiseIterableError) throw err;
+      if (err.name === "PromiseIterableError") throw err;
       return this.reject(
         createError("PromiseMapError", "some callback or iterator throws an error ", {iterable, id, result, err})
       );
@@ -157,7 +157,7 @@ wrapper("forEach", {
     try {
       await this.map(iterable, cb, {catchError: true, parallel, delay, atLeast, timeout});
     } catch (error) {
-      if (error instanceof errors.PromiseMapError) {
+      if (error.name === "PromiseMapError") {
         const {iterable, id, err} = error.args;
         return this.reject(
           createError("PromiseForEachError", "some callback or iterable throws error", {
@@ -184,7 +184,7 @@ wrapper("sequence", {
         return arr;
       }, []);
     } catch (error) {
-      if (error instanceof errors.PromiseMapError) {
+      if (error.name === "PromiseMapError") {
         const {iterable, id, result, err} = error;
         return this.reject(createError("PromiseSequenceError", "some callback or iterable throws error"), {
           iterable,
@@ -215,7 +215,7 @@ wrapper("sequenceAllSettled", {
         return arr;
       }, []);
     } catch (error) {
-      if (error instanceof errors.PromiseMapError) {
+      if (error.name === "PromiseMapError") {
         const {iterable, id, result, err} = error.args;
         return this.reject(
           createError("PromiseSequenceError", "some callback or iterable throws error", {
@@ -354,7 +354,7 @@ wrapper("waitForResult", {
       await new this(res => setTimeout(res, ellapsed));
       return this.waitForResult(fn, {ellapsed, delay, atLeast, maxIterations, retry}, args);
     } catch (err) {
-      if (err instanceof errors.PromiseMaxIterationsError) return this.reject(err);
+      if (err.name ===  "PromiseMaxIterationsError") return this.reject(err);
       if (retry) return this.waitForResult(fn, {ellapsed, delay, atLeast, maxIterations, retry, timeout}, args);
       else return this.reject(err);
     }
