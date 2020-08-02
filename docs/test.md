@@ -1,1 +1,59 @@
-# This is a test
+# Esquema de proyecto
+
+| key                       | types                   | occurrences | percents             |
+| ------------------------- | ----------------------- | ----------- | -------------------- |
+| ODS                       | Array                   |         279 | 100.0000000000000000 |
+| __v                       | Number                  |         279 | 100.0000000000000000 |
+| _id                       | ObjectId                |         279 | 100.0000000000000000 |
+| active                    | Boolean                 |         279 | 100.0000000000000000 |
+| amount                    | Number                  |         279 | 100.0000000000000000 |
+| commission                | Number                  |         279 | 100.0000000000000000 |
+| company                   | String                  |         279 | 100.0000000000000000 |
+| credit_type               | String                  |         279 | 100.0000000000000000 |
+| dues                      | Array                   |         279 | 100.0000000000000000 |
+| expenses                  | Array                   |         279 | 100.0000000000000000 |
+| history                   | Array                   |         279 | 100.0000000000000000 |
+| name                      | String                  |         279 | 100.0000000000000000 |
+| nar                       | Number                  |         279 | 100.0000000000000000 |
+| private_docs              | Array                   |         279 | 100.0000000000000000 |
+| public_docs               | Array                   |         279 | 100.0000000000000000 |
+| status                    | String                  |         279 | 100.0000000000000000 |
+| min_investment            | Number                  |         278 |  99.6415770609318940 |
+| periodicity               | Object                  |         278 |  99.6415770609318940 |
+| periodicity.duration      | Number                  |         278 |  99.6415770609318940 |
+| periodicity.measure       | String                  |         278 |  99.6415770609318940 |
+| carousel                  | Array                   |         276 |  98.9247311827956963 |
+| area                      | Array (20),Object (255) |         275 |  98.5663082437276046 |
+| use_charge                | Number                  |         274 |  98.2078853046594986 |
+| address                   | Object                  |         261 |  93.5483870967741922 |
+| address.formatted_address | String                  |         261 |  93.5483870967741922 |
+| address.location          | Object                  |         261 |  93.5483870967741922 |
+| max_investment            | null (1),Number (258)   |         259 |  92.8315412186379945 |
+| presentation              | String                  |         259 |  92.8315412186379945 |
+| aval                      | Array                   |         256 |  91.7562724014336908 |
+| rep_legal                 | Array                   |         256 |  91.7562724014336908 |
+| area.area                 | String                  |         255 |  91.3978494623655848 |
+| area.sector               | String                  |         255 |  91.3978494623655848 |
+| area.subsector            | Array                   |         255 |  91.3978494623655848 |
+| team                      | String                  |         255 |  91.3978494623655848 |
+| credit_description        | String                  |         249 |  89.2473118279569917 |
+| impact                    | String                  |         249 |  89.2473118279569917 |
+| creationDate              | Date                    |         232 |  83.1541218637992898 |
+| interest                  | Number                  |         227 |  81.3620071684587884 |
+| background                | ObjectId                |         225 |  80.6451612903225765 |
+| creationUser              | ObjectId                |         209 |  74.9103942652329806 |
+| creationUserModel         | String                  |         206 |  73.8351254480286769 |
+| lack                      | Number                  |         171 |  61.2903225806451601 |
+| address.details           | String (159),null (4)   |         163 |  58.4229390681003551 |
+| impact_value              | String                  |          97 |  34.7670250896057382 |
+| impact_text               | String                  |          95 |  34.0501792114695334 |
+| simulacion                | ObjectId                |          61 |  21.8637992831541226 |
+| tipo_simulacion           | String                  |          61 |  21.8637992831541226 |
+| descent                   | String                  |          36 |  12.9032258064516121 |
+| updateUserModel           | String                  |          27 |   9.6774193548387100 |
+| updateDate                | Date                    |          26 |   9.3189964157706093 |
+| updateUser                | ObjectId                |          26 |   9.3189964157706093 |
+| image                     | ObjectId                |          22 |   7.8853046594982077 |
+| visible                   | Boolean                 |           6 |   2.1505376344086020 |
+| __history                 | Array                   |           2 |   0.7168458781362007 |
+| images                    | Array                   |           2 |   0.7168458781362007 |
