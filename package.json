@@ -1,11 +1,13 @@
 {
   "name": "@chumager/promise-helpers",
   "main": "dist/index.js",
-  "version": "1.0.4",
+  "module": "src/index.js",
+  "version": "1.0.5",
   "author": "Juan Carlos Muñoz <jcmunoz@itdmovil.cl>",
   "description": "Promise Helpers",
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "homepage": "https://chumager.github.io/promise-helpers/",
   "repository": {
