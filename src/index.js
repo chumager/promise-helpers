@@ -67,7 +67,7 @@ wrapper("timeout", {
         if (typeof prom?.cancel === "function") {
           prom.cancel();
         }
-        return this.reject(createError("PromiseTimeoutError", error || `Promise timeout in ${time}ms`, {time}));
+        throw createError("PromiseTimeoutError", error || `Promise timeout in ${time}ms`, {time});
       })
     ]);
   },
@@ -133,9 +133,8 @@ wrapper("map", {
           else result.push(await res);
         } catch (err) {
           if (catchError) {
-            return this.reject(
-              createError("PromiseMapError", "some callback or iterator throws an error", {iterable, id, result, err})
-            );
+            id--; //preserve id because of finally
+            throw err;
           }
           result.push(err);
         } finally {
@@ -144,9 +143,7 @@ wrapper("map", {
       }
     } catch (err) {
       if (err.name === "PromiseIterableError") throw err;
-      return this.reject(
-        createError("PromiseMapError", "some callback or iterator throws an error ", {iterable, id, result, err})
-      );
+      throw createError("PromiseMapError", "some callback or iterator throws an error ", {iterable, id, result, err});
     }
     return parallel ? this.all(result) : result;
   },
@@ -159,14 +156,12 @@ wrapper("forEach", {
     } catch (error) {
       if (error.name === "PromiseMapError") {
         const {iterable, id, err} = error.args;
-        return this.reject(
-          createError("PromiseForEachError", "some callback or iterable throws error", {
-            iterable,
-            id,
-            err
-          })
-        );
-      } else return this.reject(error);
+        throw createError("PromiseForEachError", "some callback or iterable throws error", {
+          iterable,
+          id,
+          err
+        });
+      } else throw error;
     }
   },
   depends: ["map"]
@@ -186,13 +181,13 @@ wrapper("sequence", {
     } catch (error) {
       if (error.name === "PromiseMapError") {
         const {iterable, id, result, err} = error;
-        return this.reject(createError("PromiseSequenceError", "some callback or iterable throws error"), {
+        throw createError("PromiseSequenceError", "some callback or iterable throws error", {
           iterable,
           id,
           result,
           err
         });
-      } else return this.reject(error);
+      } else throw error;
     }
   },
   depends: ["map", "delay"]
@@ -209,7 +204,7 @@ wrapper("sequenceAllSettled", {
       }
     };
     try {
-      const result = await this.map(iterable, cb, {parallel: false, ...options});
+      const result = await this.map(iterable, cb, {...options, parallel: false});
       return result.reduce((arr, res) => {
         if (res !== PromiseDelay) arr.push(res);
         return arr;
@@ -217,15 +212,13 @@ wrapper("sequenceAllSettled", {
     } catch (error) {
       if (error.name === "PromiseMapError") {
         const {iterable, id, result, err} = error.args;
-        return this.reject(
-          createError("PromiseSequenceError", "some callback or iterable throws error", {
-            iterable,
-            id,
-            result,
-            err
-          })
-        );
-      } else return this.reject(error);
+        throw createError("PromiseSequenceError", "some callback or iterable throws error", {
+          iterable,
+          id,
+          result,
+          err
+        });
+      } else throw error;
     }
   },
   depends: ["map", "delay"]
@@ -252,9 +245,7 @@ wrapper("reduce", {
       }
     } catch (err) {
       if (err.name === "PromiseIterableError") throw err;
-      return this.reject(
-        createError("PromiseReduceError", "some iterable throws error", {lastResult, id, err, iterable})
-      );
+      throw createError("PromiseReduceError", "some iterable throws error", {lastResult, id, err, iterable});
     }
     return result;
   },
@@ -271,15 +262,13 @@ wrapper("waterfall", {
     } catch (error) {
       if (error.name === "PromiseReduceError") {
         const {iterable, id, lastResult, err} = error.args;
-        return this.reject(
-          createError("PromiseWaterfallError", "some callback or iterable throws error", {
-            iterable,
-            id,
-            lastResult,
-            err
-          })
-        );
-      } else return this.reject(error);
+        throw createError("PromiseWaterfallError", "some callback or iterable throws error", {
+          iterable,
+          id,
+          lastResult,
+          err
+        });
+      } else throw error;
     }
   },
   depends: ["reduce"]
@@ -354,9 +343,9 @@ wrapper("waitForResult", {
       await new this(res => setTimeout(res, ellapsed));
       return this.waitForResult(fn, {ellapsed, delay, atLeast, maxIterations, retry}, args);
     } catch (err) {
-      if (err.name ===  "PromiseMaxIterationsError") return this.reject(err);
+      if (err.name === "PromiseMaxIterationsError") throw err;
       if (retry) return this.waitForResult(fn, {ellapsed, delay, atLeast, maxIterations, retry, timeout}, args);
-      else return this.reject(err);
+      else throw err;
     }
   }
 });
