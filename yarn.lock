@@ -1302,6 +1302,7 @@ __metadata:
     babel-eslint: ^10.1.0
     chai: ^4.2.0
     chai-as-promised: ^7.1.1
+    chai-subset: ^1.6.0
     core-js: 3.6.5
     eslint: ^7.4.0
     eslint-plugin-babel: ^5.3.1
@@ -2373,6 +2374,13 @@ __metadata:
   peerDependencies:
     chai: ">= 2.1.2 < 5"
   checksum: 2/747b85b679f8decdbb83f249883519ea5d4de055f2502fb830db28175af1e4f02a6a8c505d6edce1f2cf28c5512d5e3666db92906b80e77fca30b37c3e5cd360
+  languageName: node
+  linkType: hard
+
+"chai-subset@npm:^1.6.0":
+  version: 1.6.0
+  resolution: "chai-subset@npm:1.6.0"
+  checksum: 2/bf58b1c11a7591488799f3e49f692904ca731b73cd405b468fb26c9bc42ef770d8c82b806d73c0b6f076efda08d0845b55b6532810ae34c7987e48a649e36c42
   languageName: node
   linkType: hard
 
