@@ -18,7 +18,9 @@ const localPromise = class extends Promise {};
 PromiseHelpers(localPromise);
 const chai = require("chai");
 const chaiAsPromised = require("chai-as-promised");
+const chaiSubset = require("chai-subset");
 chai.use(chaiAsPromised);
+chai.use(chaiSubset);
 chai.should();
 describe("Test", function () {
   this.slow(1);
@@ -296,7 +298,8 @@ returns well in around 100ms", function () {
         .resolve(this.test.promiseArrayInnerReject)
         .map((v, id) => v * id)
         .should.eventually.be.rejectedWith(PromiseMapError)
-        .with.nested.property("args.err", "ERROR");
+        .with.property("args")
+        .to.include({err: "ERROR", id: 2, iterable: this.test.promiseArrayInnerReject});
     });
     it("maps array of promises and multipliy by id, the third rejected with cachtError false", function () {
       return localPromise
@@ -393,7 +396,7 @@ returns well in around 230", async function () {
       await localPromise.resolve(this.test.promiseArray).map(async (v, id, array) => (arr[id] = await array[id]));
       return arr.should.be.eql(this.test.normalArray);
     });
-    it("maps array of promises and multipliy by id, the third rejected", async function () {
+    it("array of promises and multipliy by id, the third rejected", async function () {
       const arr = [];
       return localPromise
         .resolve(this.test.promiseArrayInnerReject)
@@ -529,19 +532,15 @@ the callbacks throws with catchError false and parallel false", function () {
           atLeast: 10
         })
         .should.eventually.rejectedWith(PromiseSequenceError)
-        .to.have.nested.property("args", {
-          id: 0,
-          result: [],
-          iterable: arr
-        });
+        .with.property("args");
     });
-    it("behaves well with rejected promises", function () {
+    it("behaves well with rejected functions", function () {
       return localPromise
         .sequenceAllSettled(
           [() => 1, () => 2, () => localPromise.delay(20).then(() => localPromise.reject("ERROR")), () => 4, () => 5],
           {
-            delay: 20,
-            atLeast: 10
+            delay: 10,
+            atLeast: 20
           }
         )
         .should.eventually.eql([
