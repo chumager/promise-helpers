@@ -40,6 +40,7 @@
     "babel-eslint": "^10.1.0",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
+    "chai-subset": "^1.6.0",
     "core-js": "3.6.5",
     "eslint": "^7.4.0",
     "eslint-plugin-babel": "^5.3.1",
