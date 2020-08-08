@@ -2,7 +2,7 @@
   "name": "@chumager/promise-helpers",
   "main": "dist/index.js",
   "module": "src/index.js",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "Juan Carlos Muñoz <jcmunoz@itdmovil.cl>",
   "description": "Promise Helpers",
   "files": [
