@@ -185,7 +185,7 @@ If your resulting promise has the **cancelable** function property, it'll be exe
 
 I hope this example helps.
 ```javascript
-require("@chumager/promise-helpers").default();
+require("@chumager/promise-helpers").promiseHelpers();
 const axios = require("axios");
 //get Google Homepage
 function getGoogle(options = {}) {
@@ -536,7 +536,7 @@ The signature is
 wrapper(name: String, {Static: Function, Method: Function, depends: Array}).
 ```
 | Argument | Type | Default | Definition |
-| -------- | ---- | ------- | ---------- |
+|---|---|---|---|
 | name | String | none | The name of the Static or Method to add to the promises. |
 | Static | Function | none | The Static function to add, if there is no Method function it'll be created based on Static assuming the first argument is a promise. |
 | Method | Function | Static | The Method to add, it is chained in the promise object. |
