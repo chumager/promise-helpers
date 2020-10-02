@@ -91,18 +91,6 @@ wrapper("timeoutDefault", {
 wrapper("attachTimers", {
   async Static(prom, {delay, atLeast, timeout} = {}) {
     //check con coherence.
-    if (delay && atLeast && delay >= atLeast)
-      throw createError("PromiseTimersCoherenceError", "atLeast must be greather than delay", {
-        delay,
-        atLeast,
-        timeout
-      });
-    if (delay && timeout && delay >= timeout)
-      throw createError("PromiseTimersCoherenceError", "timeout must be greather than delay", {
-        delay,
-        atLeast,
-        timeout
-      });
     if (atLeast && timeout && atLeast >= timeout)
       throw createError("PromiseTimersCoherenceError", "timeout must be greather than atLeast", {
         delay,
