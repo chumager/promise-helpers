@@ -89,6 +89,8 @@ For some the primitives are untouchable... I'm not agree with that but I underst
 global.localPromise = class extends Promise {};
 ```
 And then apply the module to your new Promise object.
+
+Other reason could be to avoid changing global Promise when you develop a module, so the developer who uses your module will not have his promises changed.
 ## Install.
 ```sh
 yarn add @chumager/promise-helpers
@@ -167,7 +169,7 @@ Promise.delay(500, "Hello World").timeout(1000, "ERROR").then(console.log);
 ```
 will print _Hello World_ because it resolves in 500ms and the timeout was 1000ms.
 #### Notes.
-Normally a promise it's not cancelable, but some are, this means the timeout will throw but no end the promise chained, no body can ;ó(.
+Normally a promise it's not cancelable, but some are, this means the timeout will throw but no end the promise chained, nobody can ;ó(.
 
 If your resulting promise has the **cancelable** function property, it'll be executed before throw a timeout exception.
 
@@ -321,6 +323,7 @@ result = await Promise.all(result.map(cb));//[1,2,3,4,5];
 ```
 #### Notes.
 * You can use sync functions to process the async data, and it will always returns a promise of an array with inner items already resolved no matter the cb returns a promise. 
+
 ### forEach.
 Like map and behaves just like **Array.prototype.forEach** but for iterables not just arrays.
 
@@ -384,7 +387,7 @@ Like map, catchError has the same behavior.
 Like sequence but when you want yo know the status of the promise and the value o reject reason, just like Promise.allSettled, obviously it has no catchError.
 
 ### reduce.
-Just like **Array.prototype.reduce*** but supports sync cb with resolved result and iterator. It behaves like map supporting delay, atLeast and timeout, obviously without parallel, because it works in sequence.
+Just like **Array.prototype.reduce** but supports sync cb with resolved result and iterator. It behaves like map supporting delay, atLeast and timeout, obviously without parallel, because it works in sequence.
 
 ### waterfall.
 When you have a sequence of functions that have to chain the result. It's meant to High Abstraction Leven when you don't know what's coming or just want to keep your code in order.
