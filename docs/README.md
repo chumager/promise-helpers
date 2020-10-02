@@ -17,7 +17,7 @@ I love chaining, as almost all methods and statics returns promises (besides for
 Imagine a fetch who returns an array of url you must request but one by one, with some time restriction and at least some execution time
 
 ```javascript
-require("@chumager/promise-helpers").default();
+require("@chumager/promise-helpers").promiseHelpers();
 fetch("someURL")
   .timeout(1000, "first request took too long")
   .get("json")
@@ -97,13 +97,23 @@ yarn add @chumager/promise-helpers
 ```
 In your code:
 ```javascript
-const {default: PromiseHelpers} = require("@chumager/promise-helpers");
+const {promiseHelpers} = require("@chumager/promise-helpers");
 //with global Promise.
-PromiseHelpers();
+promiseHelpers();
 //or with other promise.
 const localPromise = class extends Promise {};
-PromiseHelpers(localPromise);
+promiseHelpers(localPromise);
 ```
+If you only want some method.
+```javascript
+const {functions} = require("@chumager/promise-helpers");
+//with global Promise.
+functions.delay();
+//or with other promise.
+const localPromise = class extends Promise {};
+functions.delay(localPromise);
+```
+
 ### Notes.
 Several functions only works as prototype, so if you're going to use a only function promise be aware it may not work.
 ## Helpers.
@@ -506,7 +516,7 @@ it'll retry while the result is **undefined** otherwise it will return, so if yo
 Example:
 ```javascript
 //fetching data
-const result = await Promise.resolve(fetch, undefined, someURL).get("json").exec();
+const result = await Promise.waitForResult(fetch, undefined, someURL).get("json").exec();
 
 //searching in the DOM.
 const search = id => {
@@ -525,20 +535,20 @@ The signature is
 ```javascript
 wrapper(name: String, {Static: Function, Method: Function, depends: Array}).
 ```
-Argument|Type|Default|Definition|
----|---|---|---
-name|String|none|The name of the Static or Method to add to the promises.
-Static|Function|none|The Static function to add, if there is no Method function it'll be created based on Static assuming the first argument is a promise.
-Method|Function|Static|The Method to add, it is chained in the promise object.
-depends|Array|none|the other wrappers it depends on, for example you can create 3 wrappers and the 3rd depends on the other 2.
+| Argument | Type | Default | Definition |
+| -------- | ---- | ------- | ---------- |
+| name | String | none | The name of the Static or Method to add to the promises. |
+| Static | Function | none | The Static function to add, if there is no Method function it'll be created based on Static assuming the first argument is a promise. |
+| Method | Function | Static | The Method to add, it is chained in the promise object. |
+| depends | Array | none | the other wrappers it depends on, for example you can create 3 wrappers and the 3rd depends on the other 2. |
 ### Standard Signatures for Static and Method.
 appart of delay, almost all functions has this signature:
 ```javascript
-Static(prom: Promise, ...args: Any).
+Static(prom<Promise>, ...args<Any>).
 ```
 With this signature you get automagically Method.
 ```javascript
-Method(...args: Any)
+Method(...args<Any>)
 ```
 For consistency with the class, the **Method** function assumes **this** as the promise. 
 So if no Method function is given then Static is used like:
