@@ -600,12 +600,12 @@ the callbacks throws with catchError false and parallel false", function () {
           {status: "fulfilled", value: 5}
         ]);
     });
-    it("rejects around 100ms with 5 delays of 20ms and atLeast of 10ms (timers coherence)", function () {
+    it("rejects around 100ms with 5 timeouts of 10ms and atLeast of 20ms (timers coherence)", function () {
       const arr = [() => 1, () => 2, () => 3, () => 4, () => 5];
       return this.localPromise
         .sequenceAllSettled(arr, {
-          delay: 20,
-          atLeast: 10
+          timeout: 10,
+          atLeast: 20
         })
         .should.eventually.rejectedWith(PromiseSequenceError)
         .with.property("args");
