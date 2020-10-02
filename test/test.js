@@ -13,7 +13,7 @@ const {
     PromiseWaterfallError
   },
   wrapper
-} = require("../");
+} = require("../dist/promise-helpers");
 const chai = require("chai");
 const chaiAsPromised = require("chai-as-promised");
 const chaiSubset = require("chai-subset");
@@ -522,7 +522,7 @@ the callbacks throws with catchError false and parallel false", function () {
         .should.eventually.be.eql([0, 2, 6, "ERROR", "ERROR"]);
     });
   });
-  describe("Sequence", function () {
+  describe("Sequence ", function () {
     beforeEach(function () {
       functions.sequence(this.localPromise);
     });
@@ -551,10 +551,22 @@ the callbacks throws with catchError false and parallel false", function () {
     });
     it("Promise sequence behaves well with rejected promises", function () {
       return this.localPromise
-        .sequence([() => 1, () => 2, () => this.localPromise.reject("ERROR"), () => 4, () => 5], {
-          delay: 20,
-          atLeast: 10
-        })
+        .sequence(
+          [
+            () => 1,
+            () => 2,
+            () => {
+              //throw new Error("ERROR2");
+              return this.localPromise.reject(new Error("ERROR2"));
+            },
+            () => 4,
+            () => 5
+          ],
+          {
+            delay: 20,
+            atLeast: 10
+          }
+        )
         .should.be.rejectedWith(PromiseSequenceError);
     });
     it("Promise sequence with no iterable rejects correctly", function () {

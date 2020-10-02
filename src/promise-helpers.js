@@ -89,7 +89,7 @@ wrapper("timeoutDefault", {
   depends: ["timeout"]
 });
 wrapper("attachTimers", {
-  async Static(prom, {delay, atLeast, timeout} = {}) {
+  Static(prom, {delay, atLeast, timeout} = {}) {
     //check con coherence.
     if (atLeast && timeout && atLeast >= timeout)
       throw createError("PromiseTimersCoherenceError", "timeout must be greather than atLeast", {
@@ -97,13 +97,13 @@ wrapper("attachTimers", {
         atLeast,
         timeout
       });
-    prom = this.resolve(prom);
+    prom = this.resolvePromise(prom);
     atLeast && prom.atLeast(atLeast);
     timeout && prom.timeout(timeout);
     delay && prom.delay(delay);
     return prom;
   },
-  depends: ["delay", "atLeast", "timeout"]
+  depends: ["delay", "atLeast", "timeout", "resolvePromise"]
 });
 wrapper("map", {
   async Static(iterable, cb, {catchError = true, parallel = true, delay, atLeast, timeout} = {}) {
@@ -118,7 +118,7 @@ wrapper("map", {
       for (let prom of iterable) {
         try {
           prom = await prom;
-          let res = this.resolve(cb(prom, id, iterable)).attachTimers({delay, atLeast, timeout});
+          let res = this.resolve(cb(prom, id, iterable)).then(val => this.attachTimers(val, {delay, atLeast, timeout}));
           if (parallel) result.push(res);
           else result.push(await res);
         } catch (err) {
@@ -170,7 +170,7 @@ wrapper("sequence", {
       }, []);
     } catch (error) {
       if (error.name === "PromiseMapError") {
-        const {iterable, id, result, err} = error;
+        const {iterable, id, result, err} = error.args;
         throw createError("PromiseSequenceError", "some callback or iterable throws error", {
           iterable,
           id,
@@ -354,7 +354,7 @@ function createError(name, message, args) {
         super(message);
         this.name = name;
         this.args = args;
-        if (args?.err?.stack) this.stack += `\n\tFrom Previous Error:\n${args.err.stack}`;
+        if (args?.err?.stack) this.stack += `\n  From Previous Error:\n${args.err.stack}`;
       }
     };
   return new errors[name](message, args);
@@ -365,5 +365,5 @@ function promiseHelpers(localPromise = Promise) {
     functions[key](localPromise);
   }
 }
-export default util.deprecate(promiseHelpers, "the default export is deprecated and will be eliminated soon")
+export default util.deprecate(promiseHelpers, "the default export is deprecated and will be eliminated soon");
 export {promiseHelpers, functions, errors, wrapper};
