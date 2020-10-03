@@ -1,5 +1,1 @@
 theme: jekyll-theme-modernist
-markdonwn: commonmark
-commonmark:
-  options: ["SMART", "FOOTNOTES"]
-  extensions: ["strikethrough", "autolink", "table", "tagfilter"]
