@@ -535,6 +535,7 @@ The signature is
 ```javascript
 wrapper(name: String, {Static: Function, Method: Function, depends: Array}).
 ```
+
 | Argument | Type | Default | Definition |
 |---|---|---|---|
 | name | String | none | The name of the Static or Method to add to the promises. |
