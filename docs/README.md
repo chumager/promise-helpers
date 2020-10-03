@@ -536,12 +536,15 @@ The signature is
 wrapper(name: String, {Static: Function, Method: Function, depends: Array}).
 ```
 
+
 | Argument | Type | Default | Definition |
 |---|---|---|---|
 | name | String | none | The name of the Static or Method to add to the promises. |
 | Static | Function | none | The Static function to add, if there is no Method function it'll be created based on Static assuming the first argument is a promise. |
 | Method | Function | Static | The Method to add, it is chained in the promise object. |
 | depends | Array | none | the other wrappers it depends on, for example you can create 3 wrappers and the 3rd depends on the other 2. |
+
+
 ### Standard Signatures for Static and Method.
 appart of delay, almost all functions has this signature:
 ```javascript
