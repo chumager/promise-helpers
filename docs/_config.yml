@@ -1,4 +1,4 @@
-theme: jekyll-theme-hacker
+theme: jekyll-theme-modernist
 markdonwn: commonmark
 commonmark:
   options: ["SMART", "FOOTNOTES"]
