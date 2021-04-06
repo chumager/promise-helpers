@@ -1,5 +1,4 @@
 const PromiseDelay = Symbol("PromiseDelay");
-import util from "util";
 function setName(func, name) {
   Object.defineProperty(func, "name", {value: name});
 }
@@ -365,5 +364,4 @@ function promiseHelpers(localPromise = Promise) {
     functions[key](localPromise);
   }
 }
-export default util.deprecate(promiseHelpers, "the default export is deprecated and will be eliminated soon");
 export {promiseHelpers, functions, errors, wrapper};
