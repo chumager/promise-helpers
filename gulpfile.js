@@ -1,42 +1,32 @@
-"use strict";
-const {obfuscate: needObfuscate} = require("./package.json");
-console.log("needObfuscate", needObfuscate);
-const {src, dest, parallel, watch: w} = require("gulp");
-const terser = require("gulp-terser");
-const gif = require("gulp-if");
-const rename = require("gulp-rename");
-const del = require("del");
-let gobf = v => v;
-if (needObfuscate) gobf = require("gulp-javascript-obfuscator");
-const debug = require("gulp-debug");
-const babel = require("gulp-babel");
-const path = ["src/**/*.js"];
+import gulp from "gulp";
+const {src, dest, parallel, watch: w} = gulp;
+import terser from "gulp-terser";
+import del from "del";
+import debug from "gulp-debug";
+import babel from "gulp-babel";
+import rename from "gulp-rename";
+import path from "path";
+const Path = ["src/**/*.js"];
 del.sync("dist/*");
-function js() {
+function transpile(path = Path) {
+  if (typeof path === "function") path = Path;
   return src(path, {base: "src"})
     .pipe(debug())
-    .pipe(babel())
-    .pipe(dest("dist/"))
+    .pipe(
+      babel({
+        presets: ["@babel/env"],
+        targets: {node: 16}
+      })
+    )
     .pipe(terser())
-    .pipe(gif(needObfuscate, gobf({compact: true})))
-    .pipe(rename({extname: ".min.js"}))
-    .pipe(dest("dist/"));
-}
-function obfuscate(path) {
-  return src(path, {base: "src"})
-    .pipe(debug({title: "Minimizando"}))
-    .pipe(babel())
-    .pipe(dest("dist/"))
-    .pipe(terser())
-    .pipe(gif(needObfuscate, debug({title: "Ofuscando"})))
-    .pipe(gif(needObfuscate, gobf({compact: true})))
-    .pipe(rename({extname: ".min.js"}))
+    .pipe(rename({extname: ".cjs"}))
+    .pipe(debug())
     .pipe(dest("dist/"));
 }
 function watch() {
-  const watcher = w(path);
-  watcher.on("change", obfuscate);
-  watcher.on("add", obfuscate);
+  const watcher = w(Path);
+  watcher.on("change", transpile);
+  watcher.on("add", transpile);
   watcher.on("unlink", filePath => {
     const filePathFromSrc = path.relative(path.resolve("src"), filePath);
     const destFilePath = path.resolve("dist", filePathFromSrc);
@@ -45,6 +35,5 @@ function watch() {
   });
   return watcher;
 }
-exports.watch = watch;
-exports.js = js;
-exports.default = parallel(js, watch);
+export {watch, transpile as js};
+export default parallel(transpile, watch);

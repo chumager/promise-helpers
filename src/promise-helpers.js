@@ -60,7 +60,7 @@ wrapper("atLeast", {
 wrapper("timeout", {
   Static(prom, time, error) {
     if (typeof time !== "number") {
-      throw createError("PromiseTimeoutError", "time is not a number");
+      throw createError("PromiseTimeoutError", "time is not a number", "TIMEOUT");
     }
     return this.race([
       this.resolvePromise(prom),
@@ -68,7 +68,7 @@ wrapper("timeout", {
         if (typeof prom?.cancel === "function") {
           prom.cancel();
         }
-        throw createError("PromiseTimeoutError", error || `Promise timeout in ${time}ms`, {time});
+        throw createError("PromiseTimeoutError", error || `Promise timeout in ${time}ms`, "TIMEOUT", {time});
       })
     ]);
   },
@@ -77,7 +77,7 @@ wrapper("timeout", {
 wrapper("timeoutDefault", {
   async Static(prom, time = 100, value, force = false) {
     if (typeof value === "undefined")
-      throw createError("PromiseTimeoutDefaultError", "there is no default for timeoutDefault");
+      throw createError("PromiseTimeoutDefaultError", "there is no default for timeoutDefault", "TIMEOUT_DEFAULT");
     try {
       return await this.timeout(prom, time);
     } catch (err) {
@@ -91,7 +91,7 @@ wrapper("attachTimers", {
   Static(prom, {delay, atLeast, timeout} = {}) {
     //check con coherence.
     if (atLeast && timeout && atLeast >= timeout)
-      throw createError("PromiseTimersCoherenceError", "timeout must be greather than atLeast", {
+      throw createError("PromiseTimersCoherenceError", "timeout must be greather than atLeast", "ATTACH_TIMERS", {
         delay,
         atLeast,
         timeout
@@ -111,7 +111,7 @@ wrapper("map", {
     try {
       iterable = await this.resolvePromise(iterable);
       if (!iterable[Symbol.iterator])
-        throw createError("PromiseIterableError", "trying to use map without an iterable object", {
+        throw createError("PromiseIterableError", "trying to use map without an iterable object", "MAP", {
           iterable
         });
       for (let prom of iterable) {
@@ -132,7 +132,12 @@ wrapper("map", {
       }
     } catch (err) {
       if (err.name === "PromiseIterableError") throw err;
-      throw createError("PromiseMapError", "some callback or iterator throws an error ", {iterable, id, result, err});
+      throw createError("PromiseMapError", "some callback or iterator throws an error ", "MAP", {
+        iterable,
+        id,
+        result,
+        err
+      });
     }
     return parallel ? this.all(result) : result;
   },
@@ -145,7 +150,7 @@ wrapper("forEach", {
     } catch (error) {
       if (error.name === "PromiseMapError") {
         const {iterable, id, err} = error.args;
-        throw createError("PromiseForEachError", "some callback or iterable throws error", {
+        throw createError("PromiseForEachError", "some callback or iterable throws error", "FOREACH", {
           iterable,
           id,
           err
@@ -170,7 +175,7 @@ wrapper("sequence", {
     } catch (error) {
       if (error.name === "PromiseMapError") {
         const {iterable, id, result, err} = error.args;
-        throw createError("PromiseSequenceError", "some callback or iterable throws error", {
+        throw createError("PromiseSequenceError", "some callback or iterable throws error", "SEQUENCE", {
           iterable,
           id,
           result,
@@ -201,7 +206,7 @@ wrapper("sequenceAllSettled", {
     } catch (error) {
       if (error.name === "PromiseMapError") {
         const {iterable, id, result, err} = error.args;
-        throw createError("PromiseSequenceError", "some callback or iterable throws error", {
+        throw createError("PromiseSequenceError", "some callback or iterable throws error", "SEQUENCE_ALL_SETTLED", {
           iterable,
           id,
           result,
@@ -221,7 +226,7 @@ wrapper("reduce", {
       result = await initVal;
       iterable = await iterable;
       if (!iterable[Symbol.iterator])
-        throw createError("PromiseIterableError", "trying to use reduce without an iterable object", {
+        throw createError("PromiseIterableError", "trying to use reduce without an iterable object", "REDUCE", {
           iterable
         });
       lastResult = result; //in case first iterator fails
@@ -234,7 +239,7 @@ wrapper("reduce", {
       }
     } catch (err) {
       if (err.name === "PromiseIterableError") throw err;
-      throw createError("PromiseReduceError", "some iterable throws error", {lastResult, id, err, iterable});
+      throw createError("PromiseReduceError", "some iterable throws error", "REDUCE", {lastResult, id, err, iterable});
     }
     return result;
   },
@@ -251,7 +256,7 @@ wrapper("waterfall", {
     } catch (error) {
       if (error.name === "PromiseReduceError") {
         const {iterable, id, lastResult, err} = error.args;
-        throw createError("PromiseWaterfallError", "some callback or iterable throws error", {
+        throw createError("PromiseWaterfallError", "some callback or iterable throws error", "WATERFALL", {
           iterable,
           id,
           lastResult,
@@ -267,16 +272,16 @@ wrapper("get", {
     const result = await prom;
     key = await key;
     if (typeof result !== "object")
-      throw createError("PromiseNotObject", "fulfilled promise is not an object", {result, key});
+      throw createError("PromiseNotObject", "fulfilled promise is not an object", "GET", {result, key});
     if (key in result) return result[key];
-    throw createError("PromiseKeyNotFound", `key ${key} not found`, {result, key});
+    throw createError("PromiseKeyNotFound", `key ${key} not found`, "GET", {result, key});
   }
 });
 wrapper("keys", {
   async Static(prom) {
     const result = await prom;
     if (typeof result !== "object")
-      throw createError("PromiseNotObject", "fulfilled promise is not an object", {result});
+      throw createError("PromiseNotObject", "fulfilled promise is not an object", "KEYS", {result});
     return Object.keys(await prom);
   }
 });
@@ -284,7 +289,7 @@ wrapper("call", {
   async Method(thisObj, ...args) {
     const result = await this;
     if (typeof result !== "function")
-      throw createError("PromiseCallableError", "resulting promise is not a function", {result, thisObj, args});
+      throw createError("PromiseCallableError", "resulting promise is not a function", "CALL", {result, thisObj, args});
     return result.call(thisObj, ...args);
   }
 });
@@ -292,7 +297,11 @@ wrapper("apply", {
   async Method(thisObj, args) {
     const result = await this;
     if (typeof result !== "function")
-      throw createError("PromiseCallableError", "resulting promise is not a function", {result, thisObj, args});
+      throw createError("PromiseCallableError", "resulting promise is not a function", "APPLY", {
+        result,
+        thisObj,
+        args
+      });
     return result.apply(thisObj, args);
   }
 });
@@ -300,7 +309,7 @@ wrapper("exec", {
   async Method(...args) {
     const result = await this;
     if (typeof result !== "function")
-      throw createError("PromiseCallableError", "resulting promise is not a function", {result, args});
+      throw createError("PromiseCallableError", "resulting promise is not a function", "EXEC", {result, args});
     return result(...args);
   }
 });
@@ -311,7 +320,8 @@ wrapper("waitForKey", {
     } catch (error) {
       if (error.name === "PromiseKeyNotFound") {
         --maxIterations;
-        if (maxIterations < 0) throw createError("PromiseMaxIterationsError", "Max iterations have been reached");
+        if (maxIterations < 0)
+          throw createError("PromiseMaxIterationsError", "Max iterations have been reached", "WAIT_FOR_KEY");
         await this.delay(ellapsed);
         return this.waitForKey(obj, key, {ellapsed, maxIterations});
       }
@@ -330,7 +340,8 @@ wrapper("waitForResult", {
       result = await result;
       if (typeof result !== "undefined") return result;
       --maxIterations;
-      if (maxIterations < 0) throw createError("PromiseMaxIterationsError", "Max iterations have been reached");
+      if (maxIterations < 0)
+        throw createError("PromiseMaxIterationsError", "Max iterations have been reached", "WAIT_FOR_RESULT");
       await this.delay(ellapsed);
       return this.waitForResult(fn, {ellapsed, delay, atLeast, maxIterations, retry}, args);
     } catch (err) {
@@ -346,12 +357,13 @@ wrapper("waitForResult", {
 //
 //ERRORS
 const errors = {};
-function createError(name, message, args) {
+function createError(name, message, code, args) {
   if (!errors[name])
     errors[name] = class extends Error {
       constructor(message, args) {
         super(message);
         this.name = name;
+        this.code = code;
         this.args = args;
         if (args?.err?.stack) this.stack += `\n  From Previous Error:\n${args.err.stack}`;
       }

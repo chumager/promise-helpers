@@ -13,7 +13,7 @@ const {
     PromiseWaterfallError
   },
   wrapper
-} = require("../dist/promise-helpers");
+} = require("..");
 const chai = require("chai");
 const chaiAsPromised = require("chai-as-promised");
 const chaiSubset = require("chai-subset");
