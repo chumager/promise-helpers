@@ -2,7 +2,7 @@
   "name": "@chumager/promise-helpers",
   "main": "dist/promise-helpers.cjs",
   "module": "src/promise-helpers.js",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "author": "Juan Carlos Muñoz <jcmunoz@itdmovil.cl>",
   "description": "Promise Helpers",
   "type": "module",
@@ -30,8 +30,7 @@
   "scripts": {
     "watch": "gulp watch",
     "transpile": "gulp js",
-    "test": "mocha",
-    "preinstall": "npx -y only-allow pnpm"
+    "test": "mocha"
   },
   "devDependencies": {
     "@babel/core": "^7.16.0",
