@@ -11,7 +11,7 @@ del.sync("dist/*");
 function transpile(path = Path) {
   if (typeof path === "function") path = Path;
   return src(path, {base: "src"})
-    .pipe(debug())
+    .pipe(debug({title: "SRC:", showCount: false}))
     .pipe(
       babel({
         presets: ["@babel/env"],
@@ -20,8 +20,8 @@ function transpile(path = Path) {
     )
     .pipe(terser())
     .pipe(rename({extname: ".cjs"}))
-    .pipe(debug())
-    .pipe(dest("dist/"));
+    .pipe(dest("dist/"))
+    .pipe(debug({title: "DEST:", showCount: false}));
 }
 function watch() {
   const watcher = w(Path);
