@@ -2,7 +2,7 @@
   "name": "@chumager/promise-helpers",
   "main": "dist/promise-helpers.cjs",
   "module": "src/promise-helpers.js",
-  "version": "2.1.4",
+  "version": "2.1.5",
   "author": "Juan Carlos Muñoz <jcmunoz@itdmovil.cl>",
   "description": "Promise Helpers",
   "type": "module",
@@ -27,8 +27,8 @@
     "foreach"
   ],
   "exports": {
-    "require": "dist/promise-helpers.cjs",
-    "import": "src/promise-helpers.js"
+    "require": "./dist/promise-helpers.cjs",
+    "import": "./src/promise-helpers.js"
   },
   "license": "MIT",
   "scripts": {
