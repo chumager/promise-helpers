@@ -1,42 +1,71 @@
 const PromiseDelay = Symbol("PromiseDelay");
-function setName(func, name) {
+/* function setName(func, name) {
   Object.defineProperty(func, "name", {value: name});
-}
-let functions = {};
+} */
+const functions = {};
 function wrapper(name, {Static, Method, depends = []}) {
+  // Validación crítica: async functions rompen el chaining de this.localPromise
+  /* if (Static?.constructor?.name === 'AsyncFunction') {
+    throw createError("WrapperAsyncError", `Wrapper '${name}' Static function cannot be async - breaks promise chaining`, "WRAPPER_ASYNC");
+  }
+  if (Method?.constructor?.name === 'AsyncFunction') {
+    throw createError("WrapperAsyncError", `Wrapper '${name}' Method function cannot be async - breaks promise chaining`, "WRAPPER_ASYNC");
+  } */
+
   const fn = (localPromise = Promise, force = false) => {
     depends.forEach(depend => {
       functions[depend](localPromise);
     });
     if (Method) {
-      setName(Method, "name", name);
+      // setName(Method, name);
       if (!localPromise.prototype[name] || force) {
-        localPromise.prototype[name] = Method;
+        // localPromise.prototype[name] = Method;
+        localPromise.prototype[name] = function (...args) {
+          return this.constructor.resolve(Method.call(this, ...args));
+        };
       }
     }
     if (Static) {
       if (!localPromise[name] || force) {
-        setName(Static, name);
-        localPromise[name] = Static;
+        // Magia: wrappear con resolve para garantizar this.localPromise
+        const wrappedStatic = (...args) => localPromise.resolve(Static.call(localPromise, ...args));
+        // setName(wrappedStatic, name);
+        localPromise[name] = wrappedStatic;
       }
       if (!localPromise.prototype[name]) {
-        //aplicamos el prototype desde Static
+        //aplicamos el prototype desde Static con magia
         localPromise.prototype[name] = function (...args) {
-          return this.constructor[name](this, ...args);
+          return this.constructor.resolve(this.constructor[name](this, ...args));
         };
-        setName(localPromise.prototype[name], name);
+        // setName(localPromise.prototype[name], name);
       }
     }
   };
   functions[name] = fn;
   return fn;
 }
+//returns a resolved promise, if the resolved promise is a function, executes it
 wrapper("resolvePromise", {
+  /**
+   * Resolves the promise and executes it if it's a function.
+   *
+   * @param {Promise} prom - The promise to resolve.
+   * @returns {Promise} - A promise that resolves to the result of the executed function or the original value.
+   */
   Static(prom) {
     return this.resolve(prom).then(prom => (typeof prom === "function" ? prom() : prom));
   }
 });
+//delay the resolved promise
 wrapper("delay", {
+  /**
+   * Creates a new Promise that resolves after a specified time with the provided value.
+   *
+   * @param {number} time - The time in milliseconds to wait before resolving the Promise.
+   * @param {*} value - The value to resolve the Promise with.
+   * @returns {Promise} A Promise that resolves with the provided value after the specified time.
+   */
+  // biome-ignore lint/style/useDefaultParameterLast: <explanation>
   Static(time = 100, value) {
     return this.resolvePromise(value).then(
       result =>
@@ -45,19 +74,44 @@ wrapper("delay", {
         })
     );
   },
+  /**
+   * Delays the resolution of a Promise by a specified time.
+   *
+   * @param {number} time - The time to delay the resolution by.
+   * @returns {Promise} A Promise that resolves after the specified time.
+   */
   Method(time = 100) {
     const promise = this.constructor;
     return this.then(val => promise.delay(time, val));
   },
   depends: ["resolvePromise"]
 });
+//wait at least time to return
 wrapper("atLeast", {
+  /**
+   * Returns the given promise after at least specified time.
+   *
+   * @param {Promise} prom - The promise to be executed.
+   * @param {number} time - The time to wait before executing the promise (default is 100ms).
+   * @returns {Promise} A promise that resolves with the result of the given promise.
+   */
   Static(prom, time = 100) {
     return this.resolve(this.all([this.resolvePromise(prom), this.delay(time)]).get(0));
   },
   depends: ["get", "delay", "resolvePromise"]
 });
+//timesout a promise if it takes more than time
+//TODO implement abotions with signals
 wrapper("timeout", {
+  /**
+   * Executes a promise with a timeout.
+   *
+   * @param {Promise} prom - The promise to execute.
+   * @param {number} time - The time in milliseconds before timing out.
+   * @param {string} error - The error message to throw on timeout.
+   * @returns {Promise} A promise that resolves when the input promise resolves or rejects on timeout.
+   * @throws {Error} PromiseTimeoutError if the promise times out.
+   */
   Static(prom, time, error) {
     if (typeof time !== "number") {
       throw createError("PromiseTimeoutError", "time is not a number", "TIMEOUT");
@@ -74,37 +128,92 @@ wrapper("timeout", {
   },
   depends: ["delay", "resolvePromise"]
 });
+//if a promise timesout, return the default value
 wrapper("timeoutDefault", {
-  async Static(prom, time = 100, value, force = false) {
+  /**
+   * Executes a promise with a timeout, if it surpasses the timeout, the default is returned
+   *
+   * @param {Promise} prom - The promise to execute.
+   * @param {number} [time=100] - The timeout duration in milliseconds.
+   * @param {*} value - The value to return if the promise times out.
+   * @param {boolean} [force=false] - Whether to force return the value on timeout.
+   * @returns {*} The result of the promise execution or the specified value on timeout.
+   * @throws {Error} PromiseTimeoutDefaultError - If no default value is provided for timeout.
+   */
+  // biome-ignore lint/style/useDefaultParameterLast: <explanation>
+  Static(prom, time = 100, value, force = false) {
     if (typeof value === "undefined")
-      throw createError("PromiseTimeoutDefaultError", "there is no default for timeoutDefault", "TIMEOUT_DEFAULT");
-    try {
-      return await this.timeout(prom, time);
-    } catch (err) {
-      if (err.name === "PromiseTimeoutError" || force) return value;
-      throw err;
-    }
+      return this.reject(
+        createError("PromiseTimeoutDefaultError", "there is no default for timeoutDefault", "TIMEOUT_DEFAULT")
+      );
+
+    return this.timeout(prom, time).then(
+      result => result,
+      err => {
+        if (err.name === "PromiseTimeoutError" || force) return value;
+        throw err;
+      }
+    );
   },
   depends: ["timeout"]
 });
+//adds te three timers to a promise
 wrapper("attachTimers", {
-  Static(prom, {delay, atLeast, timeout} = {}) {
-    //check con coherence.
+  /**
+   * Static method to configure a promise with optional delay, atLeast, and timeout values.
+   *
+   * @param {Promise} prom - The promise to configure.
+   * @param {Object} options - An object containing optional delay, atLeast, and timeout values.
+   * @param {number} options.delay - The delay value to set on the promise.
+   * @param {number} options.atLeast - The minimum time the promise should take to resolve.
+   * @param {number} options.timeout - The maximum time the promise should take to resolve.
+   * @returns {Promise} The configured promise.
+   * @throws {Error} PromiseTimersCoherenceError - If timeout is not greater than atLeast.
+   */
+  async Static(prom, options = {}) {
+    const {delay, atLeast, timeout} = options;
+
     if (atLeast && timeout && atLeast >= timeout)
-      throw createError("PromiseTimersCoherenceError", "timeout must be greather than atLeast", "ATTACH_TIMERS", {
-        delay,
-        atLeast,
-        timeout
-      });
+      throw createError(
+        "PromiseTimersCoherenceError",
+        `timeout (${timeout}) must be greater than atLeast (${atLeast})`,
+        "ATTACH_TIMERS",
+        {
+          delay,
+          atLeast,
+          timeout
+        }
+      );
     prom = this.resolvePromise(prom);
-    atLeast && prom.atLeast(atLeast);
-    timeout && prom.timeout(timeout);
-    delay && prom.delay(delay);
+
+    // Encadenar timers dinámicamente manteniendo orden lógico
+    const timers = ["atLeast", "timeout", "delay"];
+
+    timers.forEach(timer => {
+      if (options[timer]) {
+        prom = prom[timer](options[timer]);
+      }
+    });
+
     return prom;
   },
   depends: ["delay", "atLeast", "timeout", "resolvePromise"]
 });
+//same as Array.map
 wrapper("map", {
+  /**
+   * Asynchronously maps over an iterable using a callback function.
+   *
+   * @param {Iterable} iterable - The iterable to map over.
+   * @param {Function} cb - The callback function to apply to each element.
+   * @param {Object} options - Additional options.
+   * @param {boolean} [options.catchError=true] - Whether to catch errors thrown during mapping.
+   * @param {boolean} [options.parallel=true] - Whether to map elements in parallel.
+   * @param {number} [options.delay] - Delay in milliseconds before resolving each element.
+   * @param {number} [options.atLeast] - Minimum time in milliseconds to wait before resolving each element.
+   * @param {number} [options.timeout] - Time in milliseconds after which to reject the promise.
+   * @returns {Promise<Array>} A promise that resolves to an array of mapped values.
+   */
   async Static(iterable, cb, {catchError = true, parallel = true, delay, atLeast, timeout} = {}) {
     const result = [];
     let id = 0;
@@ -117,7 +226,7 @@ wrapper("map", {
       for (let prom of iterable) {
         try {
           prom = await prom;
-          let res = this.resolve(cb(prom, id, iterable)).then(val => this.attachTimers(val, {delay, atLeast, timeout}));
+          const res = this.resolve(cb(prom, id, iterable)).attachTimers({delay, atLeast, timeout});
           if (parallel) result.push(res);
           else result.push(await res);
         } catch (err) {
@@ -136,14 +245,109 @@ wrapper("map", {
         iterable,
         id,
         result,
-        err
+        err,
+        cause: err
       });
     }
     return parallel ? this.all(result) : result;
   },
   depends: ["attachTimers", "resolvePromise"]
 });
+wrapper("find", {
+  /**
+   * Asynchronously finds the first element in an iterable that satisfies the callback condition. Behaves as Array.find
+   *
+   * @param {Iterable} iterable - The iterable to search in.
+   * @param {Function} cb - The callback function to test each element.
+   * @param {Object} options - Additional options for the search.
+   * @param {boolean} [options.catchError=true] - Flag to determine whether to catch errors during iteration.
+   * @param {number} [options.delay] - Delay in milliseconds for each iteration.
+   * @param {number} [options.atLeast] - Minimum time in milliseconds for each iteration.
+   * @param {number} [options.timeout] - Timeout in milliseconds for each iteration.
+   * @returns {*} - The first element that satisfies the callback, or undefined if none found.
+   */
+  async Static(iterable, cb, {catchError = true, delay, atLeast, timeout} = {}) {
+    let id = 0;
+
+    try {
+      iterable = await this.resolvePromise(iterable);
+      if (!iterable[Symbol.iterator]) {
+        throw createError("PromiseIterableError", "trying to use find without an iterable object", "FIND", {iterable});
+      }
+
+      for (const prom of iterable) {
+        try {
+          const item = await prom; // Resolver la promesa primero como hace map
+          const result = await this.resolve(cb(item, id, iterable)).attachTimers({delay, atLeast, timeout});
+          if (result) {
+            return item; // Return rápido - encontré el item
+          }
+        } catch (err) {
+          if (catchError) {
+            throw err; // Throw directo para que el catch de abajo lo capture
+          }
+          // Si catchError = false, no me importan los errores del ciclo, continúo
+        }
+        id++;
+      }
+      // Si llego acá, no encontré nada → undefined (como Array.find)
+    } catch (err) {
+      if (err.name === "PromiseIterableError") throw err; // PromiseIterableError siempre pasa
+      // Cualquier otro error del ciclo se convierte en PromiseFindError
+      throw createError("PromiseFindError", "some callback or iterator throws an error", "FIND", {
+        iterable,
+        id,
+        err,
+        cause: err
+      });
+    }
+  },
+  depends: ["attachTimers", "resolvePromise"]
+});
+wrapper("some", {
+  /**
+   * Asynchronously iterates over the given iterable behaves as Array.some
+   *
+   * @param {Iterable} iterable - The iterable to iterate over.
+   * @param {Function} cb - The callback function to apply to each element.
+   * @param {Object} options - Additional options for the iteration.
+   * @param {boolean} [options.catchError=true] - Flag to determine whether to catch errors during iteration.
+   * @param {number} [options.delay] - Delay in milliseconds for each iteration.
+   * @param {number} [options.atLeast] - Minimum time in milliseconds for each iteration.
+   * @param {number} [options.timeout] - Timeout in milliseconds for each iteration.
+   * @returns {boolean} - True if any result is truthy during iteration, false otherwise.
+   */
+  async Static(iterable, cb, options = {}) {
+    try {
+      return !!(await this.find(iterable, cb, options));
+    } catch (err) {
+      if (err.name === "PromiseFindError") {
+        const {iterable, id, err: originalErr} = err.args;
+        throw createError("PromiseSomeError", "find operation failed in some", "SOME", {
+          iterable,
+          id,
+          err: originalErr,
+          cause: err
+        });
+      }
+      throw err;
+    }
+  },
+  depends: ["find"]
+});
 wrapper("forEach", {
+  /**
+   * Asynchronously iterates over the elements of the given iterable and calls the provided callback function on each element. Behaves as Array.forEach but it can work in "parallel"
+   *
+   * @param {Iterable} iterable - The iterable to iterate over.
+   * @param {Function} cb - The callback function to call on each element.
+   * @param {Object} options - Additional options for controlling the iteration.
+   * @param {boolean} [options.parallel=true] - Whether to process elements in parallel.
+   * @param {number} [options.delay] - Delay between processing elements.
+   * @param {number} [options.atLeast] - minimum time for the resulting promise to be returned
+   * @param {number} [options.timeout] - Timeout for processing each element.
+   * @throws {Error} If an error occurs during iteration.
+   */
   async Static(iterable, cb, {parallel = true, delay, atLeast, timeout} = {}) {
     try {
       await this.map(iterable, cb, {catchError: true, parallel, delay, atLeast, timeout});
@@ -153,9 +357,11 @@ wrapper("forEach", {
         throw createError("PromiseForEachError", "some callback or iterable throws error", "FOREACH", {
           iterable,
           id,
-          err
+          err,
+          cause: err
         });
-      } else throw error;
+      }
+      throw error;
     }
   },
   depends: ["map"]
@@ -179,19 +385,29 @@ wrapper("sequence", {
           iterable,
           id,
           result,
-          err
+          err,
+          cause: err
         });
-      } else throw error;
+      }
+      throw error;
     }
   },
   depends: ["map", "delay"]
 });
 wrapper("sequenceAllSettled", {
+  /**
+   * Asynchronously processes an iterable using a callback function.
+   *
+   * @param {Iterable} iterable - The iterable to process.
+   * @param {Object} options - Additional options for processing.
+   * @returns {Array} - An array of processed values.
+   * @throws {Error} - Throws an error if processing encounters an issue.
+   */
   async Static(iterable, options = {}) {
     const cb = async v => {
       if (typeof v === "number") return this.delay(v, PromiseDelay);
       try {
-        let res = this.resolve(v());
+        const res = this.resolve(v());
         return {status: "fulfilled", value: await res};
       } catch (reason) {
         return {status: "rejected", reason};
@@ -210,14 +426,28 @@ wrapper("sequenceAllSettled", {
           iterable,
           id,
           result,
-          err
+          err,
+          cause: err
         });
-      } else throw error;
+      }
+      throw error;
     }
   },
   depends: ["map", "delay"]
 });
 wrapper("reduce", {
+  /**
+   * Reduces an iterable using a callback function with optional delay, atLeast, and timeout settings.
+   *
+   * @param {Iterable} iterable - The iterable to reduce.
+   * @param {Function} cb - The callback function to execute on each element of the iterable.
+   * @param {Promise} initVal - The initial value for the reduction.
+   * @param {Object} options - Additional options like delay, atLeast, and timeout.
+   * @param {number} options.delay - The delay in milliseconds.
+   * @param {number} options.atLeast - The minimum time in milliseconds to wait.
+   * @param {number} options.timeout - The maximum time in milliseconds to wait.
+   * @returns {Promise} - A promise that resolves to the final result of the reduction.
+   */
   async Static(iterable, cb, initVal, {delay, atLeast, timeout} = {}) {
     let result;
     let id = 0;
@@ -239,13 +469,30 @@ wrapper("reduce", {
       }
     } catch (err) {
       if (err.name === "PromiseIterableError") throw err;
-      throw createError("PromiseReduceError", "some iterable throws error", "REDUCE", {lastResult, id, err, iterable});
+      throw createError("PromiseReduceError", "some iterable throws error", "REDUCE", {
+        lastResult,
+        id,
+        err,
+        iterable,
+        cause: err
+      });
     }
     return result;
   },
   depends: ["attachTimers"]
 });
 wrapper("waterfall", {
+  /**
+   * Reduces the iterable made of functions or numbers in a waterfall sequence.
+   * It allows to concatenates functions and delays to get the last value.
+   * If a number is encountered in the iterable, delays the reduction by that amount.
+   * If an error occurs during reduction, it is caught and rethrown with additional information.
+   *
+   * @param {Iterable} iterable - The iterable to be reduced.
+   * @param {Function} initVal - The initial value for the reduction.
+   * @param {Object} options - Additional options for the reduction.
+   * @returns {Promise} - A promise that resolves to the final result of the reduction.
+   */
   async Static(iterable, initVal, options) {
     const cb = (result, v) => {
       if (typeof v === "number") return this.delay(v, result);
@@ -260,14 +507,25 @@ wrapper("waterfall", {
           iterable,
           id,
           lastResult,
-          err
+          err,
+          cause: err
         });
-      } else throw error;
+      }
+      throw error;
     }
   },
   depends: ["reduce"]
 });
 wrapper("get", {
+  /**
+   * Asynchronously retrieves a value from a promise result object using a specified key.
+   *
+   * @param {Promise} prom - The promise to retrieve the result from.
+   * @param {string} key - The key to look for in the result object.
+   * @returns {Promise} A promise that resolves to the value associated with the specified key.
+   * @throws {Error} PromiseNotObject - If the fulfilled promise is not an object.
+   * @throws {Error} PromiseKeyNotFound - If the specified key is not found in the result object.
+   */
   async Static(prom, key) {
     const result = await prom;
     key = await key;
@@ -278,6 +536,13 @@ wrapper("get", {
   }
 });
 wrapper("keys", {
+  /**
+   * Asynchronously retrieves the keys of an object from a fulfilled promise.
+   *
+   * @param {Promise} prom - The promise to retrieve keys from.
+   * @returns {Array} An array containing the keys of the object.
+   * @throws {Error} If the fulfilled promise is not an object.
+   */
   async Static(prom) {
     const result = await prom;
     if (typeof result !== "object")
@@ -286,6 +551,14 @@ wrapper("keys", {
   }
 });
 wrapper("call", {
+  /**
+   * Asynchronous method that calls the resulting promise as a function with the provided arguments.
+   *
+   * @param {Object} thisObj - The object to bind to the function call.
+   * @param {...any} args - Arguments to pass to the function call.
+   * @returns {Promise<any>} - A promise that resolves with the result of the function call.
+   * @throws {Error} - PromiseCallableError if the resulting promise is not a function.
+   */
   async Method(thisObj, ...args) {
     const result = await this;
     if (typeof result !== "function")
@@ -294,6 +567,14 @@ wrapper("call", {
   }
 });
 wrapper("apply", {
+  /**
+   * Asynchronously calls the resulting promise as a function with the provided arguments.
+   *
+   * @param {Object} thisObj - The object to bind to the function call.
+   * @param {Array} args - The arguments to pass to the function call.
+   * @returns {Promise} - A promise that resolves with the result of the function call.
+   * @throws {Error} - PromiseCallableError if the resulting promise is not a function.
+   */
   async Method(thisObj, args) {
     const result = await this;
     if (typeof result !== "function")
@@ -306,15 +587,33 @@ wrapper("apply", {
   }
 });
 wrapper("exec", {
-  async Method(...args) {
-    const result = await this;
+  /**
+   * Asynchronous method that calls a function with the provided arguments.
+   *
+   * @param {...any} args - Arguments to pass to the function.
+   * @returns {Promise<any>} - Result of the function call.
+   * @throws {Error} - If the resulting promise is not a function.
+   */
+  async Static(prom, ...args) {
+    const result = await prom;
     if (typeof result !== "function")
       throw createError("PromiseCallableError", "resulting promise is not a function", "EXEC", {result, args});
     return result(...args);
   }
 });
 wrapper("waitForKey", {
-  async Static(obj, key, {ellapsed = 100, maxIterations = 10000} = {}) {
+  /**
+   * Asynchronously retrieves a key from an object after resolving a promise.
+   *
+   * @param {Object} obj - The object to retrieve the key from.
+   * @param {string} key - The key to retrieve from the object.
+   * @param {Object} options - Additional options.
+   * @param {number} [options.ellapsed=100] - The time to wait between iterations.
+   * @param {number} [options.maxIterations=20] - The maximum number of iterations to attempt.
+   * @returns {Promise} - A promise that resolves with the retrieved key value.
+   * @throws {Error} - If the key is not found after the maximum iterations.
+   */
+  async Static(obj, key, {ellapsed = 100, maxIterations = 20} = {}) {
     try {
       return await this.resolvePromise(obj).get(key);
     } catch (error) {
@@ -331,7 +630,22 @@ wrapper("waitForKey", {
   depends: ["delay", "get", "resolvePromise"]
 });
 wrapper("waitForResult", {
-  async Static(fn, {ellapsed = 100, delay, atLeast, maxIterations = 10000, retry = true, timeout} = {}, args = []) {
+  /**
+   * Asynchronously executes a function with retry logic and timeouts.
+   *
+   * @param {Function} fn - The function to execute.
+   * @param {Object} options - An object containing options for the execution.
+   * @param {number} [options.ellapsed=100] - The time to wait between retries.
+   * @param {number} options.delay - The delay before the first execution.
+   * @param {number} options.atLeast - The minimum time to wait before the next retry.
+   * @param {number} [options.maxIterations=20] - The maximum number of iterations before giving up.
+   * @param {boolean} [options.retry=true] - Whether to retry on failure.
+   * @param {number} options.timeout - The timeout for the function execution.
+   * @param {Array} [args=[]] - Arguments to pass to the function.
+   * @returns {Promise} - A promise that resolves with the result of the function.
+   * @throws {Error} - If the maximum number of iterations is reached.
+   */
+  async Static(fn, {ellapsed = 100, delay, atLeast, maxIterations = 20, retry = true, timeout} = {}, args = []) {
     if (!Array.isArray(args)) args = [args];
     try {
       args = await this.all(args);
@@ -347,14 +661,68 @@ wrapper("waitForResult", {
     } catch (err) {
       if (err.name === "PromiseMaxIterationsError") throw err;
       if (retry) return this.waitForResult(fn, {ellapsed, delay, atLeast, maxIterations, retry, timeout}, args);
-      else throw err;
+      throw err;
     }
   },
   depends: ["delay", "attachTimers"]
 });
+wrapper("tap", {
+  /**
+   * Allows "peeking" at a promise's resolution value or rejection reason
+   * without affecting the main promise chain. Ideal for logging, debugging,
+   * or executing side effects that should not modify the data flow.
+   *
+   * The callbacks (resultCallback, rejectCallback) are executed with the value or error.
+   * The return values of these callbacks are ignored by `tap`. However,
+   * if either callback throws an error, the promise returned by `tap`
+   * will be rejected with that new error.
+   *
+   * @memberof Promise.prototype
+   * @param {function(value: any): void} [resultCallback] - Function to execute if the promise is fulfilled.
+   * It receives the resolution value.
+   * @param {function(error: any): void} [rejectCallback] - Function to execute if the promise is rejected.
+   * It receives the rejection reason.
+   * @returns {Promise<any>} A new promise that resolves or rejects with the same value or error
+   * as the original promise, after the appropriate callback (if provided)
+   * has been executed.
+   **/
+  Method(resultCallback, rejectCallback) {
+    return this.then(
+      val => {
+        if (typeof resultCallback === "function") resultCallback(val);
+        return val;
+      },
+      err => {
+        if (typeof rejectCallback === "function") rejectCallback(err);
+        throw err;
+      }
+    );
+  }
+});
+
+wrapper("callAttr", {
+  /**
+   * Calls a method on the resolved object, maintaining proper 'this' context
+   */
+  async Static(prom, attr, ...args) {
+    const obj = await prom;
+    return obj[attr].call(obj, ...args);
+  }
+});
+
+wrapper("applyAttr", {
+  /**
+   * Applies a method on the resolved object with arguments array, maintaining proper 'this' context
+   */
+  async Static(prom, attr, args = []) {
+    const obj = await prom;
+    return obj[attr].apply(obj, args);
+  }
+});
+
 //TODO
-//toJSON
-//
+//implementar props, que entrega el objeto promesa con sus props resueltos.
+//posible implementacioin de promisify, orientado al front ya que node lya lo tiene.
 //ERRORS
 const errors = {};
 function createError(name, message, code, args) {
@@ -364,7 +732,8 @@ function createError(name, message, code, args) {
         super(message);
         this.name = name;
         this.code = code;
-        this.args = args;
+        this.args = args ?? {};
+        if (this.args?.err) this.args.cause = this.args.err;
         if (args?.err?.stack) this.stack += `\n  From Previous Error:\n${args.err.stack}`;
       }
     };
@@ -376,4 +745,4 @@ function promiseHelpers(localPromise = Promise) {
     functions[key](localPromise);
   }
 }
-export {promiseHelpers, functions, errors, wrapper};
+export {promiseHelpers, functions, errors, wrapper, createError};
