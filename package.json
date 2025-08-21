@@ -1,6 +1,6 @@
 {
   "name": "@chumager/promise-helpers",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "author": "Juan Carlos Muñoz <jcmunoz@itdmovil.cl>",
   "description": "Promise Helpers",
   "type": "module",
