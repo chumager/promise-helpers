@@ -1191,7 +1191,9 @@ the callbacks throws with catchError false and parallel false", function () {
 
     it("array of promises and return array[id]", async function () {
       const arr = [];
-      await this.localPromise.resolve(this.test.promiseArray).forEach(async (v, id, array) => (arr[id] = await array[id]));
+      await this.localPromise
+        .resolve(this.test.promiseArray)
+        .forEach(async (v, id, array) => (arr[id] = await array[id]));
       return arr.should.be.eql(this.test.normalArray);
     });
 
@@ -1236,7 +1238,10 @@ the callbacks throws with catchError false and parallel false", function () {
     it(`forEach with delay option ${timer}ms sequential`, async function () {
       const start = Date.now();
       const arr = [];
-      await this.localPromise.forEach(this.test.normalArray, (v, id) => (arr[id] = v * 2), {delay: timer, parallel: false});
+      await this.localPromise.forEach(this.test.normalArray, (v, id) => (arr[id] = v * 2), {
+        delay: timer,
+        parallel: false
+      });
       checkTiming(start, timer * 5, 5);
       return arr.should.be.eql(this.test.resultNormalArray);
     });
@@ -1356,7 +1361,13 @@ the callbacks throws with catchError false and parallel false", function () {
     it(`sequence with rejection timing verification ${timer}ms`, function () {
       const start = Date.now();
       return this.localPromise
-        .sequence([() => 1, () => { throw "ERROR"; }, () => 3])
+        .sequence([
+          () => 1,
+          () => {
+            throw "ERROR";
+          },
+          () => 3
+        ])
         .should.eventually.be.rejectedWith(PromiseSequenceError)
         .then(() => checkTiming(start, 1));
     });
@@ -1456,7 +1467,13 @@ the callbacks throws with catchError false and parallel false", function () {
     it(`sequenceAllSettled with rejection should continue`, function () {
       const start = Date.now();
       return this.localPromise
-        .sequenceAllSettled([() => 1, () => { throw "ERROR"; }, () => 3])
+        .sequenceAllSettled([
+          () => 1,
+          () => {
+            throw "ERROR";
+          },
+          () => 3
+        ])
         .should.eventually.eql([
           {status: "fulfilled", value: 1},
           {status: "rejected", reason: "ERROR"},
@@ -1558,10 +1575,14 @@ the callbacks throws with catchError false and parallel false", function () {
     it(`reduce with callback rejection timing verification ${timer}ms`, function () {
       const start = Date.now();
       return this.localPromise
-        .reduce(this.test.normalArray, (res, v, id) => {
-          if (id === 2) throw "ERROR";
-          return res + v;
-        }, 1)
+        .reduce(
+          this.test.normalArray,
+          (res, v, id) => {
+            if (id === 2) throw "ERROR";
+            return res + v;
+          },
+          1
+        )
         .should.eventually.be.rejectedWith(PromiseReduceError)
         .then(() => checkTiming(start, 1));
     });
@@ -1668,16 +1689,16 @@ the callbacks throws with catchError false and parallel false", function () {
       functions.waitForKey(this.localPromise);
     });
 
-    it("assign key after 400ms and resolves", function () {
+    it("assign key after 100ms and resolves", function () {
       const obj = {};
-      setTimeout(() => (obj.test = true), 400);
+      setTimeout(() => (obj.test = true), 100);
       return this.localPromise.waitForKey(obj, "test").should.eventually.be.eql(true);
     });
 
-    it("inner assign key after 400ms and resolves", function () {
+    it("inner assign key after 100ms and resolves", function () {
       const obj = new this.localPromise(res => {
         const obj = {};
-        setTimeout(() => (obj.test = true), 400);
+        setTimeout(() => (obj.test = true), 100);
         res(obj);
       });
       return obj.waitForKey("test").should.eventually.be.eql(true);
@@ -1685,59 +1706,105 @@ the callbacks throws with catchError false and parallel false", function () {
 
     it("rejects after 2 iterations", function () {
       const obj = {};
-      setTimeout(() => (obj.test = true), 400);
+      setTimeout(() => (obj.test = true), 300);
       return this.localPromise
         .waitForKey(obj, "test", {maxIterations: 2})
         .should.eventually.rejectedWith(PromiseMaxIterationsError);
     });
 
-    it("calls onRetry function on each retry", async function () {
+    it("uses onRetry function instead of ellapsed delay", async function () {
       const obj = {};
-      let retryCount = 0;
+      let retryTimestamps = [];
+
       const onRetry = async () => {
-        retryCount++;
-        // Simular algo como $nextTick con un pequeño delay
-        await new Promise(resolve => setTimeout(resolve, 10));
+        retryTimestamps.push(Date.now());
+        // onRetry con delay de 50ms
+        await new Promise(resolve => setTimeout(resolve, 50));
       };
-      
-      // Asignar la key después de algunos retries
+
+      // Asignar la key después de 3 retries (~150ms con onRetry de 50ms)
       setTimeout(() => {
         obj.test = "success";
-      }, 50);
-      
+      }, 120);
+
+      const startTime = Date.now();
       const result = await this.localPromise.waitForKey(obj, "test", {
-        ellapsed: 100,
+        ellapsed: 200, // Si usara este delay, tardaría mucho más
         maxIterations: 10,
         onRetry
       });
-      
+
+      const totalTime = Date.now() - startTime;
+
       result.should.equal("success");
-      retryCount.should.be.at.least(1);
+      retryTimestamps.length.should.be.at.least(2); // Al menos 2 retries
+
+      // Verificar que los retries ocurrieron con ~50ms de diferencia, no 200ms
+      if (retryTimestamps.length >= 2) {
+        const timeBetweenRetries = retryTimestamps[1] - retryTimestamps[0];
+        timeBetweenRetries.should.be.within(45, 65); // ~50ms con tolerancia
+      }
+
+      // El tiempo total debería ser ~120-150ms, no 400ms+ si usara ellapsed
+      totalTime.should.be.below(200);
     });
 
-    it("onRetry replaces delay when provided", async function () {
+    it("onRetry can execute sync functions like nextTick simulation", async function () {
       const obj = {};
-      let onRetryCalled = false;
-      const startTime = Date.now();
-      
+      let callOrder = [];
+
       const onRetry = async () => {
-        onRetryCalled = true;
-        // Delay mínimo para no bloquear
-        await new Promise(resolve => setTimeout(resolve, 5));
+        callOrder.push("onRetry-start");
+        // Simular un nextTick con setImmediate
+        await new Promise(resolve =>
+          setImmediate(() => {
+            callOrder.push("onRetry-nextTick");
+            resolve();
+          })
+        );
+        callOrder.push("onRetry-end");
       };
-      
-      // Asignar la key rápidamente
-      setTimeout(() => (obj.test = true), 20);
-      
-      await this.localPromise.waitForKey(obj, "test", {
-        ellapsed: 1000, // Delay largo que NO debería ejecutarse
-        maxIterations: 10,
+
+      // Asignar después del primer retry
+      setImmediate(() => {
+        callOrder.push("assign-key");
+        obj.test = "done";
+      });
+
+      const result = await this.localPromise.waitForKey(obj, "test", {
+        ellapsed: 100,
+        maxIterations: 5,
         onRetry
       });
-      
-      const elapsed = Date.now() - startTime;
-      onRetryCalled.should.be.true;
-      elapsed.should.be.below(200); // Debería ser mucho más rápido que con delay de 1000ms
+
+      result.should.equal("done");
+      // Verificar que onRetry se ejecutó antes de asignar la key
+      const onRetryIndex = callOrder.indexOf("onRetry-start");
+      const assignIndex = callOrder.indexOf("assign-key");
+      onRetryIndex.should.be.at.least(0);
+      assignIndex.should.be.above(onRetryIndex);
+    });
+
+    it("onRetry with throwing error propagates correctly", async function () {
+      const obj = {};
+      let retryCount = 0;
+
+      const onRetry = async () => {
+        retryCount++;
+        if (retryCount === 2) {
+          throw new Error("Custom onRetry error");
+        }
+      };
+
+      // Nunca asignar la key
+      const promise = this.localPromise.waitForKey(obj, "test", {
+        ellapsed: 10,
+        maxIterations: 5,
+        onRetry
+      });
+
+      await promise.should.be.rejectedWith("Custom onRetry error");
+      retryCount.should.equal(2);
     });
   });
 
@@ -1783,8 +1850,7 @@ the callbacks throws with catchError false and parallel false", function () {
       const start = Date.now();
       return this.localPromise
         .find(this.test.normalArray, v => v > 10)
-        .should.eventually.be.undefined
-        .then(() => checkTiming(start, 1));
+        .should.eventually.be.undefined.then(() => checkTiming(start, 1));
     });
 
     it("finds first element with index condition", function () {
@@ -1966,24 +2032,21 @@ the callbacks throws with catchError false and parallel false", function () {
       const start = Date.now();
       return this.localPromise
         .some(this.test.normalArray, v => v > 3)
-        .should.eventually.be.true
-        .then(() => checkTiming(start, 1));
+        .should.eventually.be.true.then(() => checkTiming(start, 1));
     });
 
     it("returns false when no element satisfies condition", function () {
       const start = Date.now();
       return this.localPromise
         .some(this.test.normalArray, v => v > 10)
-        .should.eventually.be.false
-        .then(() => checkTiming(start, 1));
+        .should.eventually.be.false.then(() => checkTiming(start, 1));
     });
 
     it("works with promise array", function () {
       const start = Date.now();
       return this.localPromise
         .some(this.test.promiseArray, v => v > 3)
-        .should.eventually.be.true
-        .then(() => checkTiming(start, 1));
+        .should.eventually.be.true.then(() => checkTiming(start, 1));
     });
 
     it("works with promise iterable", function () {
@@ -1991,64 +2054,56 @@ the callbacks throws with catchError false and parallel false", function () {
       return this.localPromise
         .resolve(this.test.normalArray)
         .some(v => v > 3)
-        .should.eventually.be.true
-        .then(() => checkTiming(start, 1));
+        .should.eventually.be.true.then(() => checkTiming(start, 1));
     });
 
     it(`some with delay option ${timer}ms finds first element (position 0)`, function () {
       const start = Date.now();
       return this.localPromise
         .some(this.test.normalArray, v => v >= 1, {delay: timer})
-        .should.eventually.be.true
-        .then(() => checkTiming(start, timer * 1)); // Processes [1] only
+        .should.eventually.be.true.then(() => checkTiming(start, timer * 1)); // Processes [1] only
     });
 
     it(`some with delay option ${timer}ms finds second element (position 1)`, function () {
       const start = Date.now();
       return this.localPromise
         .some(this.test.normalArray, v => v >= 2, {delay: timer})
-        .should.eventually.be.true
-        .then(() => checkTiming(start, timer * 2)); // Processes [1,2]
+        .should.eventually.be.true.then(() => checkTiming(start, timer * 2)); // Processes [1,2]
     });
 
     it(`some with delay option ${timer}ms finds third element (position 2)`, function () {
       const start = Date.now();
       return this.localPromise
         .some(this.test.normalArray, v => v >= 3, {delay: timer})
-        .should.eventually.be.true
-        .then(() => checkTiming(start, timer * 3)); // Processes [1,2,3]
+        .should.eventually.be.true.then(() => checkTiming(start, timer * 3)); // Processes [1,2,3]
     });
 
     it(`some with delay option ${timer}ms finds fourth element (position 3)`, function () {
       const start = Date.now();
       return this.localPromise
         .some(this.test.normalArray, v => v > 3, {delay: timer})
-        .should.eventually.be.true
-        .then(() => checkTiming(start, timer * 4)); // Processes [1,2,3,4]
+        .should.eventually.be.true.then(() => checkTiming(start, timer * 4)); // Processes [1,2,3,4]
     });
 
     it(`some with delay option ${timer}ms finds fifth element (position 4)`, function () {
       const start = Date.now();
       return this.localPromise
         .some(this.test.normalArray, v => v === 5, {delay: timer})
-        .should.eventually.be.true
-        .then(() => checkTiming(start, timer * 5)); // Processes [1,2,3,4,5] all
+        .should.eventually.be.true.then(() => checkTiming(start, timer * 5)); // Processes [1,2,3,4,5] all
     });
 
     it(`some with delay option ${timer}ms finds no element (processes all)`, function () {
       const start = Date.now();
       return this.localPromise
         .some(this.test.normalArray, v => v > 10, {delay: timer})
-        .should.eventually.be.false
-        .then(() => checkTiming(start, timer * 5)); // Processes [1,2,3,4,5] all, returns false
+        .should.eventually.be.false.then(() => checkTiming(start, timer * 5)); // Processes [1,2,3,4,5] all, returns false
     });
 
     it(`some with delay option ${timer}ms sequential`, function () {
       const start = Date.now();
       return this.localPromise
         .some(this.test.normalArray, v => v > 3, {delay: timer, parallel: false})
-        .should.eventually.be.true
-        .then(() => checkTiming(start, timer * 4, 4));
+        .should.eventually.be.true.then(() => checkTiming(start, timer * 4, 4));
     });
 
     it(`some with timeout option ${timer}ms should timeout`, function () {
@@ -2147,8 +2202,6 @@ the callbacks throws with catchError false and parallel false", function () {
         .then(() => checkTiming(start, 1));
     });
 
-
-
     it("rejects with PromiseCallableError when result is not function", function () {
       const start = Date.now();
       return this.localPromise
@@ -2191,7 +2244,6 @@ the callbacks throws with catchError false and parallel false", function () {
         .should.eventually.be.eq(72)
         .then(() => checkTiming(start, 1));
     });
-
 
     it("rejects with PromiseCallableError when result is not function", function () {
       const start = Date.now();
@@ -2343,7 +2395,9 @@ the callbacks throws with catchError false and parallel false", function () {
       const start = Date.now();
       const testObj = {
         value: 42,
-        getValue() { return this.value; }
+        getValue() {
+          return this.value;
+        }
       };
       return this.localPromise
         .resolve(testObj)
@@ -2356,7 +2410,9 @@ the callbacks throws with catchError false and parallel false", function () {
       const start = Date.now();
       const testObj = {
         value: 10,
-        add(x) { return this.value + x; }
+        add(x) {
+          return this.value + x;
+        }
       };
       return this.localPromise
         .resolve(testObj)
@@ -2367,7 +2423,12 @@ the callbacks throws with catchError false and parallel false", function () {
 
     it("static method works with native promises", function () {
       const start = Date.now();
-      const testObj = { msg: "hello", upper() { return this.msg.toUpperCase(); } };
+      const testObj = {
+        msg: "hello",
+        upper() {
+          return this.msg.toUpperCase();
+        }
+      };
       return this.localPromise
         .callAttr(Promise.resolve(testObj), "upper")
         .should.eventually.be.eq("HELLO")
@@ -2385,7 +2446,9 @@ the callbacks throws with catchError false and parallel false", function () {
       const start = Date.now();
       const testObj = {
         base: 100,
-        calculate(a, b, c) { return this.base + a + b + c; }
+        calculate(a, b, c) {
+          return this.base + a + b + c;
+        }
       };
       return this.localPromise
         .resolve(testObj)
@@ -2396,9 +2459,11 @@ the callbacks throws with catchError false and parallel false", function () {
 
     it("static method works with native promises", function () {
       const start = Date.now();
-      const testObj = { 
+      const testObj = {
         nums: [1, 2, 3],
-        sum(...args) { return this.nums.reduce((a, b) => a + b, 0) + args.reduce((a, b) => a + b, 0); }
+        sum(...args) {
+          return this.nums.reduce((a, b) => a + b, 0) + args.reduce((a, b) => a + b, 0);
+        }
       };
       return this.localPromise
         .applyAttr(Promise.resolve(testObj), "sum", [10, 20])
