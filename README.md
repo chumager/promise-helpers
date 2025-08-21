@@ -498,9 +498,10 @@ axios.get('/users').tap(console.log).get('data').tap(console.log);
 ```
 
 ### `waitForKey(object, key, options)` / `waitForResult(fn, options, args)`
-**waitForKey Options:** `{ellapsed = 100, maxIterations = 20}`
+**waitForKey Options:** `{ellapsed = 100, maxIterations = 20, onRetry?}`
 **waitForResult Options:** `{ellapsed = 100, maxIterations = 20, retry = true, delay?, atLeast?, timeout?}`
-Polls until condition is met.
+Polls until condition is met. The `onRetry` hook allows custom logic between retries.
+
 ```javascript
 // Method (most common)
 Promise.resolve(dynamicObj).waitForKey('result', {
@@ -512,8 +513,33 @@ Promise.resolve(dynamicObj).waitForKey('result', {
 Promise.waitForKey(dynamicObj, 'result');
 Promise.waitForResult(fetchFunction, {retry: true, timeout: 1000}, [arg1]);
 
-// Polling example
-obj.waitForKey('status').then(status => console.log(status));
+// Just-in-Time Loading with onRetry (lazy caching pattern)
+const userData = await Promise.waitForKey(session, 'userProfile', {
+  onRetry: async () => {
+    // Auto-load on demand instead of checking manually
+    if (!session.userProfile) {
+      session.userProfile = await loadUserProfileFromAPI(session.userId);
+    }
+  }
+});
+
+// Vue.js $nextTick simulation  
+await Promise.waitForKey(this.$refs, 'myComponent', {
+  onRetry: () => this.$nextTick() // Wait for DOM updates
+});
+
+// Traditional pattern (verbose)
+if (!obj.config) {
+  obj.config = await loadConfig();
+}
+const config = await Promise.waitForKey(obj, 'config');
+
+// Elegant pattern with onRetry
+const config = await Promise.waitForKey(obj, 'config', {
+  onRetry: async () => {
+    obj.config = await loadConfig(); // Lazy loading
+  }
+});
 ```
 
 </details>
