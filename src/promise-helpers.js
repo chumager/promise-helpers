@@ -613,7 +613,7 @@ wrapper("waitForKey", {
    * @returns {Promise} - A promise that resolves with the retrieved key value.
    * @throws {Error} - If the key is not found after the maximum iterations.
    */
-  async Static(obj, key, {ellapsed = 100, maxIterations = 20} = {}) {
+  async Static(obj, key, {ellapsed = 100, maxIterations = 20, onRetry} = {}) {
     try {
       return await this.resolvePromise(obj).get(key);
     } catch (error) {
@@ -621,8 +621,8 @@ wrapper("waitForKey", {
         --maxIterations;
         if (maxIterations < 0)
           throw createError("PromiseMaxIterationsError", "Max iterations have been reached", "WAIT_FOR_KEY");
-        await this.delay(ellapsed);
-        return this.waitForKey(obj, key, {ellapsed, maxIterations});
+        typeof onRetry == "function" ? await onRetry() : await this.delay(ellapsed);
+        return this.waitForKey(obj, key, {ellapsed, maxIterations, onRetry});
       }
       throw error;
     }
