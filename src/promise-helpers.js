@@ -253,6 +253,61 @@ wrapper("map", {
   },
   depends: ["attachTimers", "resolvePromise"]
 });
+wrapper("filter", {
+  /**
+   * Asynchronously filters an iterable using a callback function. Behaves as Array.filter.
+   *
+   * @param {Iterable} iterable - The iterable to filter.
+   * @param {Function} cb - The callback function to test each element.
+   * @param {Object} options - Additional options.
+   * @param {boolean} [options.catchError=true] - Whether to catch errors thrown during filtering. When false, the element that threw is left out of the result.
+   * @param {boolean} [options.parallel=true] - Whether to test elements in parallel.
+   * @param {number} [options.delay] - Delay in milliseconds before resolving each element.
+   * @param {number} [options.atLeast] - Minimum time in milliseconds to wait before resolving each element.
+   * @param {number} [options.timeout] - Time in milliseconds after which to reject the promise.
+   * @returns {Promise<Array>} A promise that resolves to an array with the elements whose callback was truthy.
+   */
+  async Static(iterable, cb, {catchError = true, parallel = true, delay, atLeast, timeout} = {}) {
+    const items = [];
+    const tests = [];
+    let id = 0;
+    try {
+      iterable = await this.resolvePromise(iterable);
+      if (!iterable[Symbol.iterator])
+        throw createError("PromiseIterableError", "trying to use filter without an iterable object", "FILTER", {
+          iterable
+        });
+      for (let prom of iterable) {
+        try {
+          prom = await prom;
+          const res = this.resolve(cb(prom, id, iterable)).attachTimers({delay, atLeast, timeout});
+          items.push(prom);
+          if (parallel) tests.push(res);
+          else tests.push(await res);
+        } catch (err) {
+          if (catchError) {
+            id--; //preserve id because of finally
+            throw err;
+          }
+        } finally {
+          id++;
+        }
+      }
+    } catch (err) {
+      if (err.name === "PromiseIterableError") throw err;
+      throw createError("PromiseFilterError", "some callback or iterator throws an error", "FILTER", {
+        iterable,
+        id,
+        items,
+        err,
+        cause: err
+      });
+    }
+    const resolved = parallel ? await this.all(tests) : tests;
+    return items.filter((_item, index) => resolved[index]);
+  },
+  depends: ["attachTimers", "resolvePromise"]
+});
 wrapper("find", {
   /**
    * Asynchronously finds the first element in an iterable that satisfies the callback condition. Behaves as Array.find
@@ -621,7 +676,7 @@ wrapper("waitForKey", {
         --maxIterations;
         if (maxIterations < 0)
           throw createError("PromiseMaxIterationsError", "Max iterations have been reached", "WAIT_FOR_KEY");
-        typeof onRetry == "function" ? await onRetry() : await this.delay(ellapsed);
+        typeof onRetry === "function" ? await onRetry() : await this.delay(ellapsed);
         return this.waitForKey(obj, key, {ellapsed, maxIterations, onRetry});
       }
       throw error;
@@ -631,19 +686,41 @@ wrapper("waitForKey", {
 });
 wrapper("waitForResult", {
   /**
-   * Asynchronously executes a function with retry logic and timeouts.
+   * Polls a function with retry logic and timeouts until it returns a defined value.
    *
-   * @param {Function} fn - The function to execute.
+   * **Polling contract — IMPORTANT:**
+   * The function `fn` is invoked repeatedly. Polling continues **only while `fn` returns
+   * `undefined`**. Any other return value (including `null`, `false`, `0`, `""`, `NaN`)
+   * is considered "result obtained" and resolves the promise immediately.
+   *
+   * Rationale: `undefined` is the only value JS produces by default for "no value
+   * assigned" — it never collides with legitimate domain values. Other falsy values
+   * (`null`, `false`, etc) are common legitimate returns from APIs (querySelector,
+   * findOne, etc), so treating them as "keep waiting" would be ambiguous.
+   *
+   * **Common pitfall**: APIs like `document.querySelector` return `null` when not
+   * found. If you wrap them directly, polling stops at the first `null`. Wrap with
+   * `?? undefined` or explicit conversion to keep polling:
+   *
+   * ```js
+   * // ❌ Stops at first null
+   * Promise.waitForResult(() => document.querySelector("#missing"));
+   *
+   * // ✅ Polls until element exists
+   * Promise.waitForResult(() => document.querySelector("#missing") ?? undefined);
+   * ```
+   *
+   * @param {Function} fn - The function to poll. Must return `undefined` to continue polling, any other value to resolve.
    * @param {Object} options - An object containing options for the execution.
-   * @param {number} [options.ellapsed=100] - The time to wait between retries.
-   * @param {number} options.delay - The delay before the first execution.
-   * @param {number} options.atLeast - The minimum time to wait before the next retry.
+   * @param {number} [options.ellapsed=100] - The time to wait between retries (ms).
+   * @param {number} options.delay - The delay before the first execution (ms).
+   * @param {number} options.atLeast - The minimum time to wait before the next retry (ms).
    * @param {number} [options.maxIterations=20] - The maximum number of iterations before giving up.
-   * @param {boolean} [options.retry=true] - Whether to retry on failure.
-   * @param {number} options.timeout - The timeout for the function execution.
+   * @param {boolean} [options.retry=true] - Whether to retry on thrown errors.
+   * @param {number} options.timeout - The timeout for the function execution (ms).
    * @param {Array} [args=[]] - Arguments to pass to the function.
-   * @returns {Promise} - A promise that resolves with the result of the function.
-   * @throws {Error} - If the maximum number of iterations is reached.
+   * @returns {Promise} - A promise that resolves with the first defined return value of `fn`.
+   * @throws {PromiseMaxIterationsError} - If the maximum number of iterations is reached without `fn` returning a defined value.
    */
   async Static(fn, {ellapsed = 100, delay, atLeast, maxIterations = 20, retry = true, timeout} = {}, args = []) {
     if (!Array.isArray(args)) args = [args];

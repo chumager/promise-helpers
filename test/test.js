@@ -1135,6 +1135,101 @@ the callbacks throws with catchError false and parallel false", function () {
     });
   });
 
+  describe("Filter", function () {
+    beforeEach(function () {
+      functions.filter(this.localPromise);
+    });
+    let timer = 10;
+
+    it("array of numbers keeping the even ones", function () {
+      return this.localPromise.filter(this.test.normalArray, v => v % 2 === 0).should.eventually.be.eql([2, 4]);
+    });
+
+    it("keeps the element, not the callback result", function () {
+      return this.localPromise.filter(this.test.normalArray, () => "truthy").should.eventually.be.eql(this.test.normalArray);
+    });
+
+    it("keeps falsy elements when the callback is truthy", function () {
+      return this.localPromise.filter([0, null, "", false], () => true).should.eventually.be.eql([0, null, "", false]);
+    });
+
+    it("empty array returns empty", function () {
+      return this.localPromise.filter([], () => true).should.eventually.be.eql([]);
+    });
+
+    it("nothing passes returns empty", function () {
+      return this.localPromise.filter(this.test.normalArray, () => false).should.eventually.be.eql([]);
+    });
+
+    it("undefined from the callback excludes", function () {
+      return this.localPromise.filter(this.test.normalArray, v => (v > 3 ? true : undefined)).should.eventually.be.eql([4, 5]);
+    });
+
+    it("async callback", function () {
+      return this.localPromise
+        .filter(this.test.normalArray, async v => v > 3)
+        .should.eventually.be.eql([4, 5]);
+    });
+
+    it("promise array of numbers keeping the even ones", function () {
+      return this.localPromise
+        .resolve(this.test.promiseArray)
+        .filter(v => v % 2 === 0)
+        .should.eventually.be.eql([2, 4]);
+    });
+
+    it("array of promises, callback receives id and iterable", function () {
+      return this.localPromise
+        .resolve(this.test.promiseArray)
+        .filter((v, id, arr) => arr.length === this.test.normalArray.length && id < 2)
+        .should.eventually.be.eql([1, 2]);
+    });
+
+    it(`filters with delay in parallel, around ${timer}ms`, function () {
+      const start = Date.now();
+      return this.localPromise
+        .filter(this.test.normalArray, async v => v > 2, {parallel: true, delay: timer})
+        .should.eventually.be.eql([3, 4, 5])
+        .then(() => checkTiming(start, timer, 5));
+    });
+
+    it(`filters with delay sequentially, around ${timer * 5}ms`, function () {
+      const start = Date.now();
+      return this.localPromise
+        .filter(this.test.normalArray, async v => v > 2, {parallel: false, delay: timer})
+        .should.eventually.be.eql([3, 4, 5])
+        .then(() => checkTiming(start, timer * 5, 5));
+    });
+
+    it("rejects with PromiseFilterError when the callback throws", function () {
+      return this.localPromise
+        .filter(this.test.normalArray, v => {
+          if (v === 3) throw new Error("ERROR");
+          return true;
+        })
+        .should.eventually.be.rejectedWith(errors.PromiseFilterError)
+        .with.property("args")
+        .to.include({id: 2});
+    });
+
+    it("catchError false leaves out the element that threw", function () {
+      return this.localPromise
+        .filter(
+          this.test.normalArray,
+          v => {
+            if (v === 3) throw new Error("ERROR");
+            return true;
+          },
+          {catchError: false}
+        )
+        .should.eventually.be.eql([1, 2, 4, 5]);
+    });
+
+    it("rejects with PromiseIterableError when it is not iterable", function () {
+      return this.localPromise.filter(42, () => true).should.eventually.be.rejectedWith(PromiseIterableError);
+    });
+  });
+
   describe("ForEach", function () {
     beforeEach(function () {
       functions.forEach(this.localPromise);
@@ -1829,6 +1924,63 @@ the callbacks throws with catchError false and parallel false", function () {
       return this.localPromise
         .waitForResult(fn, {maxIterations: 2})
         .should.eventually.rejectedWith(PromiseMaxIterationsError);
+    });
+
+    it("stops polling on null (null is a legitimate value, not a 'keep waiting' signal)", function () {
+      // null is treated as "result obtained" → returns null immediately on first iteration.
+      let calls = 0;
+      const fn = () => {
+        calls++;
+        return null;
+      };
+      return this.localPromise
+        .waitForResult(fn, {maxIterations: 10})
+        .should.eventually.be.null.then(() => calls.should.equal(1));
+    });
+
+    it("stops polling on falsy values (false, 0, empty string)", async function () {
+      const cases = [false, 0, "", NaN];
+      for (const value of cases) {
+        let calls = 0;
+        const fn = () => {
+          calls++;
+          return value;
+        };
+        const result = await this.localPromise.waitForResult(fn, {maxIterations: 10});
+        // Use Object.is to handle NaN (NaN !== NaN with === but Object.is(NaN, NaN) === true).
+        Object.is(result, value).should.be.true;
+        calls.should.equal(1);
+      }
+    });
+
+    it("continues polling while undefined is returned, resolves on first non-undefined value", function () {
+      let calls = 0;
+      const fn = () => {
+        calls++;
+        if (calls < 3) return undefined; // explicitly undefined → keep polling
+        return "done";
+      };
+      return this.localPromise
+        .waitForResult(fn, {ellapsed: 10, maxIterations: 10})
+        .should.eventually.equal("done")
+        .then(() => calls.should.equal(3));
+    });
+
+    it("polls a DOM-style API (returning null) only when wrapped with ?? undefined", function () {
+      // Simulates document.querySelector pattern: returns null until target appears.
+      let attempts = 0;
+      let target = null;
+      // Schedule the "element appearing" after a few polls.
+      setTimeout(() => (target = {tagName: "DIV"}), 50);
+
+      const fn = () => {
+        attempts++;
+        return target ?? undefined; // ✅ wrap null → undefined to keep polling
+      };
+      return this.localPromise
+        .waitForResult(fn, {ellapsed: 20, maxIterations: 20})
+        .should.eventually.deep.equal({tagName: "DIV"})
+        .then(() => attempts.should.be.greaterThan(1));
     });
   });
 

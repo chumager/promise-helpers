@@ -18,7 +18,7 @@ And yes, I love chaining! Almost all methods (static and instance) in this libra
 ## Key Features
 
 * **Timing Control:** `delay`, `timeout`, `atLeast` to precisely manage when and how long promises take to resolve or before they are considered overdue.
-* **Flow Control:** Asynchronous versions of `map`, `forEach`, `some`, `reduce`, plus `sequence` and `waterfall` for orchestrating complex ordered operations.
+* **Flow Control:** Asynchronous versions of `map`, `filter`, `forEach`, `some`, `reduce`, plus `sequence` and `waterfall` for orchestrating complex ordered operations.
 * **Utility Methods:** Helpers like `get` (retrieve a property from a resolved object, expecting it to be a function if used with `exec`), `exec`/`call`/`apply` (invoke a resolved function-promise), `resolvePromise` (resolves a value, and executes it if it's a function).
 * **Highly Extensible:** Use the powerful `wrapper` function to easily define and attach your own custom chainable methods to any Promise constructor.
 * **Flexible:** Works with the global native `Promise` or can be applied to custom Promise-compatible classes, keeping global prototypes untouched if you prefer.
@@ -270,6 +270,22 @@ Promise.map(records, async record => db.save(record), {parallel: false});
 filePaths.map(path => fs.readFile(path), {parallel: false, delay: 50});
 ```
 
+### `filter(iterable, callback, options)`
+**Options:** `{catchError = true, parallel = true, delay?, atLeast?, timeout?}`
+Async version of Array.filter — returns the elements whose callback resolved truthy. With `catchError: false` the element that threw is left out of the result.
+```javascript
+// Method (most common) - Keep the endpoints that answer
+Promise.resolve(endpoints).filter(async url => {
+  return fetch(`${url}/ping`).timeout(2000).callAttr('ok');
+}); // Returns the responsive endpoints
+
+// Static - Permission gate
+Promise.filter(functions, func => func.canRun(req));
+
+// Sequential to avoid overload, dropping the ones that fail
+filePaths.filter(path => fs.access(path), {parallel: false, catchError: false});
+```
+
 ### `forEach(iterable, callback, options)`
 **Options:** `{parallel = true, delay?, atLeast?, timeout?}`
 Async forEach with parallel/sequential control.
@@ -500,7 +516,31 @@ axios.get('/users').tap(console.log).get('data').tap(console.log);
 ### `waitForKey(object, key, options)` / `waitForResult(fn, options, args)`
 **waitForKey Options:** `{ellapsed = 100, maxIterations = 20, onRetry?}`
 **waitForResult Options:** `{ellapsed = 100, maxIterations = 20, retry = true, delay?, atLeast?, timeout?}`
+
 Polls until condition is met. The `onRetry` hook allows custom logic between retries.
+
+#### Polling contract — IMPORTANT
+
+- **`waitForKey`**: polls while `object[key]` is missing or falsy (uses `lodash.get`).
+- **`waitForResult`**: polls **only while `fn` returns `undefined`**. Any other value (including `null`, `false`, `0`, `""`) immediately resolves the promise.
+
+**Rationale**: `undefined` is the only value JS produces by default for "no value assigned" — it never collides with legitimate domain values. Other falsy values like `null` are common legitimate returns from APIs (`document.querySelector`, `Array.find`, mongoose `findOne`, etc.), so treating them as "keep waiting" would create ambiguity.
+
+#### Common pitfall (waitForResult)
+
+DOM/array APIs return `null`/`undefined` ambiguously. If your `fn` returns `null` for "not found", polling stops at the first `null`. Wrap with `?? undefined`:
+
+```javascript
+// ❌ Stops at first null — querySelector returns null when not found
+const el = await Promise.waitForResult(() => document.querySelector("#myElem"));
+// Result: el === null on first iteration if element doesn't exist yet.
+
+// ✅ Polls until element exists
+const el = await Promise.waitForResult(() =>
+  document.querySelector("#myElem") ?? undefined
+);
+// Result: el is the actual element, polling waits until it appears.
+```
 
 ```javascript
 // Method (most common)
@@ -523,7 +563,7 @@ const userData = await Promise.waitForKey(session, 'userProfile', {
   }
 });
 
-// Vue.js $nextTick simulation  
+// Vue.js $nextTick simulation
 await Promise.waitForKey(this.$refs, 'myComponent', {
   onRetry: () => this.$nextTick() // Wait for DOM updates
 });
