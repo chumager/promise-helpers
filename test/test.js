@@ -27,10 +27,12 @@ chai.use(chaiSubset);
 chai.should();
 function checkTiming(start, expectedDuration, tolerance = 2) {
   const elapsed = Date.now() - start;
-  if (Math.abs(elapsed - expectedDuration) > tolerance) {
+  // a shared CI runner can be late, never early: TIMING_SLACK widens only the late side
+  const late = tolerance + Number(process.env.TIMING_SLACK ?? 0);
+  if (elapsed < expectedDuration - tolerance || elapsed > expectedDuration + late) {
     throw createError(
       "CheckTiming",
-      `Expected ~${expectedDuration}ms but took ${elapsed}ms (tolerance: ±${tolerance}ms)`
+      `Expected ~${expectedDuration}ms but took ${elapsed}ms (tolerance: -${tolerance}/+${late}ms)`
     );
   }
   return true;
