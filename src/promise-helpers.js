@@ -660,6 +660,10 @@ wrapper("waitForKey", {
   /**
    * Asynchronously retrieves a key from an object after resolving a promise.
    *
+   * The value at `key` comes back as is, even when it is a function (it is not called). `obj` itself goes
+   * through `resolvePromise`: if it is a function, it is called to get the object. The key may exist before
+   * what you need is in it (`window.$dialog` before its methods): then poll with `waitForResult` instead.
+   *
    * @param {Object} obj - The object to retrieve the key from.
    * @param {string} key - The key to retrieve from the object.
    * @param {Object} options - Additional options.
@@ -708,6 +712,19 @@ wrapper("waitForResult", {
    *
    * // ✅ Polls until element exists
    * Promise.waitForResult(() => document.querySelector("#missing") ?? undefined);
+   * ```
+   *
+   * **Second pitfall — a function result is CALLED**: the result goes through `attachTimers` →
+   * `resolvePromise`, which runs a function value (`typeof e === "function" ? e() : e`). Waiting for a
+   * method (`() => obj.method`) therefore calls it once with no arguments. Return the object, never the
+   * function:
+   *
+   * ```js
+   * // ❌ Calls $dialog.info() with no arguments (an empty dialog opens)
+   * Promise.waitForResult(() => window.$dialog.info);
+   *
+   * // ✅ Waits for the method and resolves with its owner
+   * Promise.waitForResult(() => (typeof window.$dialog?.info === "function" ? window.$dialog : undefined));
    * ```
    *
    * @param {Function} fn - The function to poll. Must return `undefined` to continue polling, any other value to resolve.
